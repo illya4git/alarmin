@@ -11,6 +11,7 @@ bin/
 *.der
 *.pem
 developer_key*
+apps/watch/source/generated/Secrets.mc
 
 # Local config / secrets
 .env

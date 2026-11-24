@@ -238,9 +238,12 @@ alarmin/
 
 **Phase 3: Watch MVP**
 
-- [ ] Region picker (on-device `Menu2` + phone settings list), `Storage` model.
-- [ ] Glance view (colour, name, since, stale state).
-- [ ] Widget view + 10-s foreground polling, error states (no phone / HTTP error / stale).
+- [x] Region picker (on-device `Menu2` + phone settings list, both generated from `packages/shared`), `Storage` model.
+- [x] Glance view (colour, name, since, stale state) with a throttled fetch on show.
+- [x] Widget view + 10-s foreground polling, error states (no phone / HTTP error / stale).
+- [x] Build tooling: `pnpm watch:build` / `pnpm watch:sim` (`scripts/watch.ts`); app key and proxy URL from `.env` into git-ignored `Secrets.mc`. Builds clean at type-check level 2.
+- [ ] Check in the simulator: widget polling, picker, error states (proxy stopped, phone disconnected).
+- [ ] On the FR55 via an HTTPS tunnel: glance fetch-on-show, layout, readability.
 
 **Phase 4: Background and change prompt**
 
