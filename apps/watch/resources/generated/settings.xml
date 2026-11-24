@@ -36,6 +36,10 @@
     <properties>
         <property id="regionId" type="number">31</property>
         <property id="proxyUrl" type="string"></property>
+        <!-- Wake prompt per new level (plan D6). No settings UI yet; all on. -->
+        <property id="alRed" type="boolean">true</property>
+        <property id="alYellow" type="boolean">true</property>
+        <property id="alGreen" type="boolean">true</property>
     </properties>
 
     <settings>

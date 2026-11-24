@@ -6,9 +6,6 @@ import Toybox.WatchUi;
 // Fetches /v1/s/:id for the selected region and stores the result in Status.
 (:glance)
 class StatusRequest {
-    // Custom error code: phone not connected, request not attempted.
-    static const ERR_NO_PHONE = -1000;
-
     private var _inFlight as Boolean = false;
     private var _regionId as Number = 0;
 
@@ -21,21 +18,13 @@ class StatusRequest {
         }
         _regionId = Settings.regionId();
         if (!System.getDeviceSettings().phoneConnected) {
-            Status.saveError(_regionId, ERR_NO_PHONE);
+            Status.saveError(_regionId, Status.ERR_NO_PHONE);
             WatchUi.requestUpdate();
             return;
         }
         _inFlight = true;
-        Communications.makeWebRequest(
-            Settings.proxyUrl() + "/v1/s/" + _regionId,
-            null,
-            {
-                :method => Communications.HTTP_REQUEST_METHOD_GET,
-                :headers => {"X-Alarmin-Key" => Secrets.APP_KEY},
-                :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
-            },
-            method(:onResponse)
-        );
+        Communications.makeWebRequest(Settings.statusUrl(_regionId), null, Settings.requestOptions(),
+            method(:onResponse));
     }
 
     function onResponse(code as Number, data as Dictionary or String or Null) as Void {

@@ -1,3 +1,4 @@
+import Toybox.Attention;
 import Toybox.Graphics;
 import Toybox.Lang;
 import Toybox.Timer;
@@ -15,6 +16,7 @@ class MainView extends WatchUi.View {
     }
 
     function onShow() as Void {
+        vibrateForWake(Status.takePendingWake());
         _request.fetch();
         var timer = new Timer.Timer();
         timer.start(method(:onTick), POLL_MS, true);
@@ -30,6 +32,24 @@ class MainView extends WatchUi.View {
 
     function onTick() as Void {
         _request.fetch();
+    }
+
+    // Opened from a wake prompt: a level-specific pattern, recognisable without looking.
+    // Red: three long. Yellow: two short. Clear: one short.
+    private function vibrateForWake(level as Number) as Void {
+        if (level == Status.UNKNOWN || !(Attention has :vibrate)) {
+            return;
+        }
+        var pattern = [] as Array<Attention.VibeProfile>;
+        var count = level == Levels.RED ? 3 : level == Levels.YELLOW ? 2 : 1;
+        var onMs = level == Levels.RED ? 600 : 200;
+        for (var i = 0; i < count; i++) {
+            if (i > 0) {
+                pattern.add(new Attention.VibeProfile(0, 250));
+            }
+            pattern.add(new Attention.VibeProfile(100, onMs));
+        }
+        Attention.vibrate(pattern);
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {

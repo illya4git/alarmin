@@ -7,12 +7,41 @@ import Toybox.Time;
 //   "r" region id, "l" level, "f" flags, "t" since (epoch s, 0 = unknown),
 //   "ft" fetched at (watch epoch s), "a" proxy data age at fetch (s), "x" proxy stale flag,
 //   "e" last error code (0 = ok), "et" when that error happened.
-(:glance)
+// Written by the glance, the widget and (API >= 3.2) the background service.
+(:background, :glance)
 module Status {
     const STORAGE_KEY = "st";
     const UNKNOWN = -1;
+    // Custom error code: phone not connected, request not attempted.
+    const ERR_NO_PHONE = -1000;
     // Older data than this is not shown as a colour.
     const MAX_AGE_S = 15 * 60;
+
+    // Pending "vibrate on open" after a wake prompt: [level, set at (epoch s)].
+    const WAKE_KEY = "wk";
+    // A wake marker older than this is ignored (prompt declined, app opened later).
+    const WAKE_MAX_AGE_S = 10 * 60;
+
+    function setPendingWake(level as Number) as Void {
+        Storage.setValue(WAKE_KEY, [level, Time.now().value()] as Array<Storage.ValueType>);
+    }
+
+    // Returns the level of a recent wake prompt and clears the marker, or UNKNOWN.
+    function takePendingWake() as Number {
+        var v = Storage.getValue(WAKE_KEY);
+        if (v == null) {
+            return UNKNOWN;
+        }
+        Storage.deleteValue(WAKE_KEY);
+        if (v instanceof Array && v.size() == 2) {
+            var level = v[0];
+            var at = v[1];
+            if (level instanceof Number && at instanceof Number && Time.now().value() - at <= WAKE_MAX_AGE_S) {
+                return level;
+            }
+        }
+        return UNKNOWN;
+    }
 
     function load() as Dictionary<String, Number> {
         var v = Storage.getValue(STORAGE_KEY);

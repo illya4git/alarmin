@@ -63,7 +63,7 @@ module Ui {
     }
 
     function errorText(code as Number) as String {
-        if (code == StatusRequest.ERR_NO_PHONE || code == Communications.BLE_CONNECTION_UNAVAILABLE) {
+        if (code == Status.ERR_NO_PHONE || code == Communications.BLE_CONNECTION_UNAVAILABLE) {
             return "No phone";
         } else if (code == Communications.NETWORK_REQUEST_TIMED_OUT) {
             return "Timeout";

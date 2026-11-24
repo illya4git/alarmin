@@ -5,7 +5,8 @@
  *   node scripts/watch.ts build [device]     # secrets + monkeyc → apps/watch/bin/alarmin-<device>.prg
  *   node scripts/watch.ts sim [device]       # build, start the simulator if needed, load the app
  *
- * .env keys used: APP_KEYS (first key goes into the watch), WATCH_PROXY_URL (default http://127.0.0.1:8080),
+ * .env keys used: APP_KEYS (first key goes into the watch), WATCH_PROXY_URL (default http://127.0.0.1:8080;
+ * a WATCH_PROXY_URL environment variable overrides it),
  * WATCH_DEVELOPER_KEY (path to the Connect IQ developer key). Secrets.mc is git-ignored.
  */
 import { spawn, spawnSync } from 'node:child_process';
@@ -55,13 +56,14 @@ function sdkJava(mainClass: string, args: string[], options: { detached?: boolea
 function writeSecrets(env: Record<string, string>): void {
   const appKey = env.APP_KEYS?.split(',')[0]?.trim();
   if (!appKey) throw new Error('APP_KEYS is missing in .env');
-  const proxyUrl = (env.WATCH_PROXY_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
+  // The process environment wins, e.g. to point a test build at a mock.
+  const proxyUrl = (process.env.WATCH_PROXY_URL || env.WATCH_PROXY_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '');
   const out = join(watchDir, 'source/generated/Secrets.mc');
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(
     out,
     `// GENERATED from .env by scripts/watch.ts. Git-ignored; do not commit.
-(:glance)
+(:background, :glance)
 module Secrets {
     const APP_KEY = ${JSON.stringify(appKey)};
     const PROXY_URL = ${JSON.stringify(proxyUrl)};
