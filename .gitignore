@@ -1,0 +1,28 @@
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Connect IQ build output and signing keys
+bin/
+*.prg
+*.iq
+*.der
+*.pem
+developer_key*
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+
+# Raw upstream recordings (large; curated fixtures live in apps/proxy/test/fixtures)
+spikes/*/data/
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

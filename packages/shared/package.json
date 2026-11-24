@@ -1,0 +1,16 @@
+{
+  "name": "@alarmin/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Region table and wire constants shared by the proxy and (via codegen) the watch",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "codegen": "node scripts/gen-monkeyc.ts",
+    "verify-upstream": "node scripts/verify-upstream.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

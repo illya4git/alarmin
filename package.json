@@ -1,0 +1,22 @@
+{
+  "name": "alarmin",
+  "private": true,
+  "description": "Ukrainian air-raid alert widget for Garmin watches, with a TypeScript proxy",
+  "type": "module",
+  "packageManager": "pnpm@12.23.0",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "codegen": "pnpm --filter @alarmin/shared codegen",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

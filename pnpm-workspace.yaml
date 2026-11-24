@@ -1,0 +1,4 @@
+# apps/watch is a Monkey C project without package.json, so the glob skips it.
+packages:
+  - apps/*
+  - packages/*

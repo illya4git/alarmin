@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
+    <iq:application id="6d07edd6cba54fd78f5aafb612d84991" type="widget" name="@Strings.AppName" entry="WakeDemoApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.1.0">
+        <iq:products>
+            <iq:product id="fr55"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Background"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+        <iq:barrels/>
+    </iq:application>
+</iq:manifest>
