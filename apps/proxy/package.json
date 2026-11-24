@@ -1,0 +1,19 @@
+{
+  "name": "@alarmin/proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Polls Ukrainian air-raid alert feeds and serves tiny per-region status for Garmin watches",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@alarmin/shared": "workspace:*",
+    "@fastify/rate-limit": "^11.3.0",
+    "fastify": "^5.12.8",
+    "zod": "^4.6.7"
+  }
+}

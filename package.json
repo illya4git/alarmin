@@ -9,6 +9,7 @@
   },
   "scripts": {
     "codegen": "pnpm --filter @alarmin/shared codegen",
+    "proxy:dev": "pnpm --filter @alarmin/proxy dev",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "biome check .",

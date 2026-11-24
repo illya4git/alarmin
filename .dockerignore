@@ -1,0 +1,10 @@
+**/node_modules
+**/test
+.git
+.env
+.env.*
+apps/watch
+spikes
+docs
+deploy
+*.md
