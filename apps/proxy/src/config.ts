@@ -30,7 +30,7 @@ const ConfigSchema = z.object({
     .positive()
     .default(24 * 60 * 60 * 1000),
   RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(120),
-  /** Set when running behind Caddy so client IPs come from X-Forwarded-For. */
+  /** Set when running behind a reverse proxy so client IPs come from X-Forwarded-For. */
   TRUST_PROXY: bool,
 });
 

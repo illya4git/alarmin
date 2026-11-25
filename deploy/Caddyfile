@@ -1,4 +1,0 @@
-# Automatic HTTPS (Let's Encrypt) for the proxy. Garmin Connect Mobile requires a valid certificate.
-{$DOMAIN} {
-	reverse_proxy proxy:8080
-}

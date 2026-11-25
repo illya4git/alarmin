@@ -1,36 +1,25 @@
-# Usage (from this directory):
-#   cp ../.env.example ../.env   # then set APP_KEYS and DOMAIN
+# Example: run the proxy container on any host (amd64 or arm64).
+# TLS, domain and reverse proxy are up to you; point your proxy at port 8080.
+#
+#   cp ../.env.example ../.env   # then set APP_KEYS
 #   docker compose --env-file ../.env up -d --build
 services:
   proxy:
     build:
       context: ..
       dockerfile: apps/proxy/Dockerfile
+    image: alarmin-proxy
     env_file: ../.env
     environment:
+      # Behind a reverse proxy, take client IPs (for rate limiting) from X-Forwarded-For.
       TRUST_PROXY: "true"
-    expose:
-      - "8080"
+    ports:
+      # Loopback only: expose it through your reverse proxy, not directly.
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
     read_only: true
     security_opt:
       - no-new-privileges:true
-
-  caddy:
-    image: caddy:2.10-alpine
-    depends_on:
-      - proxy
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    restart: unless-stopped
-
-volumes:
-  caddy_data:
-  caddy_config:
+    # Comfortable ceiling for small boards; measured idle use is far below it.
+    mem_limit: 128m
+    cpus: 0.5
