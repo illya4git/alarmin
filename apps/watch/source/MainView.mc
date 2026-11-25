@@ -66,11 +66,11 @@ class MainView extends WatchUi.View {
         dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
 
         // Region name
-        dc.drawText(cx, h * 18 / 100, Graphics.FONT_SMALL, Regions.nameOf(Settings.regionId()),
+        dc.drawText(cx, h * 14 / 100, Graphics.FONT_SMALL, Regions.nameOf(Settings.regionId()),
             Graphics.TEXT_JUSTIFY_CENTER);
 
         // Headline
-        dc.drawText(cx, h * 42 / 100, Graphics.FONT_LARGE, Ui.headline(level, flags),
+        dc.drawText(cx, h * 37 / 100, Graphics.FONT_LARGE, Ui.headline(level, flags),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
         // Since / extra flags
@@ -82,11 +82,11 @@ class MainView extends WatchUi.View {
             detail += (detail.length() > 0 ? "\n" : "") + "+ shelling";
         }
         if (detail.length() > 0) {
-            dc.drawText(cx, h * 56 / 100, Graphics.FONT_TINY, detail, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(cx, h * 49 / 100, Graphics.FONT_TINY, detail, Graphics.TEXT_JUSTIFY_CENTER);
         }
 
         // Footer: freshness or error, at most two short lines (the round screen narrows at the bottom)
-        dc.drawText(cx, h * 76 / 100, Graphics.FONT_XTINY, footer(st),
+        dc.drawText(cx, h * 79 / 100, Graphics.FONT_XTINY, footer(st),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
