@@ -43,7 +43,9 @@ module Settings {
     } {
         return {
             :method => Communications.HTTP_REQUEST_METHOD_GET,
-            :headers => {"X-Alarmin-Key" => Secrets.APP_KEY},
+            // The second header skips ngrok's free-tier HTML warning page (test tunnels);
+            // other servers ignore it.
+            :headers => {"X-Alarmin-Key" => Secrets.APP_KEY, "ngrok-skip-browser-warning" => "1"},
             :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON
         };
     }

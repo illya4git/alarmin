@@ -85,21 +85,22 @@ class MainView extends WatchUi.View {
             dc.drawText(cx, h * 56 / 100, Graphics.FONT_TINY, detail, Graphics.TEXT_JUSTIFY_CENTER);
         }
 
-        // Footer: freshness or error
-        dc.drawText(cx, h * 78 / 100, Graphics.FONT_XTINY, footer(st), Graphics.TEXT_JUSTIFY_CENTER);
+        // Footer: freshness or error, at most two short lines (the round screen narrows at the bottom)
+        dc.drawText(cx, h * 76 / 100, Graphics.FONT_XTINY, footer(st),
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
     private function footer(st as Dictionary<String, Number>) as String {
         var e = st["e"];
         var age = Status.dataAge(st);
         if (e != null && e != 0) {
-            return Ui.errorText(e) + (age >= 0 ? ", data " + Ui.age(age) : "");
+            return Ui.errorText(e) + (age >= 0 ? "\ndata " + Ui.age(age) : "");
         }
         if (age < 0) {
             return "Loading...";
         }
         if (st["x"] == 1) {
-            return "Source down, " + Ui.age(age);
+            return "Source down\n" + Ui.age(age);
         }
         return "Updated " + Ui.age(age);
     }

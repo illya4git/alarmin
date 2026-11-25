@@ -243,7 +243,7 @@ alarmin/
 - [x] Widget view + 10-s foreground polling, error states (no phone / HTTP error / stale).
 - [x] Build tooling: `pnpm watch:build` / `pnpm watch:sim` (`scripts/watch.ts`); app key and proxy URL from `.env` into git-ignored `Secrets.mc`. Builds clean at type-check level 2.
 - [x] Check in the simulator: widget polling, picker, error states (proxy stopped, phone disconnected).
-- [ ] On the FR55 via an HTTPS tunnel: glance fetch-on-show, layout, readability.
+- [x] On the FR55 via an HTTPS tunnel (ngrok): layout, readability, widget polling. Glance shortened to 3 rows, footer to 2 lines (§7).
 
 **Phase 4: Background and change prompt**
 
@@ -303,6 +303,8 @@ alarmin/
 | 2026-11-25 | Siren's ETag is a SHA-256 of the body and stable, but ~10 % of conditional requests (133 of 1,343) get a 200 with the identical body instead of a 304.                                                                                                                                                | Harmless: recomputing gives the same states and keeps `since`. Optional: skip normalising when the ETag equals the last one.                                                                                                  |
 | 2026-11-25 | Tryvoha: 2 timeouts in 240 polls; new alerts visible a median 31 s (max 47 s) after `started_at`; `updated_at` changes on every response, so bodies always differ.                                                                                                                                    | Fallback colour changes arrive ~0.5 min late; acceptable within the 5-min background interval. Never diff Tryvoha bodies as a whole.                                                                                          |
 | 2026-11-25 | Applying D3 to both sources: all 15 colour changes in the run matched 1:1 (none missing on either side), Tryvoha later by a median 27 s (max 44 s); no colour flapped back within 2 min. Agreement 99–100 % per region outside those lags, except Crimea (Siren red since 2022, absent from Tryvoha). | Same normaliser rule works for both; 3-min divergence threshold has ample margin. Crimea → unknown in fallback (§3.1). Activity was low (15 changes / 2 h), so rerun during a large attack before relying on the flap result. |
+| 2026-11-25 | FR55 over an ngrok tunnel: works end to end. Free ngrok answers browser-like User-Agents (the phone's request) with an HTML warning page, which the watch reports as -400.                                                                                                                            | Watch always sends `ngrok-skip-browser-warning`; harmless elsewhere.                                                                                                                                                          |
+| 2026-11-25 | FR55 UI review: glance needs short words (`RED`/`YELLOW`/`CLEAR`) with "since" on its own row; long footers clip on the round screen. In the simulator, Back from the widget ends the app (blue-triangle screen); it has no glance loop.                                                              | 3-row glance; footer split into two short lines.                                                                                                                                                                              |
 
 ## 8. Open items
 

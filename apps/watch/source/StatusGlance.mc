@@ -25,7 +25,6 @@ class StatusGlance extends WatchUi.GlanceView {
     function onUpdate(dc as Graphics.Dc) as Void {
         var st = Status.current();
         var level = Status.displayLevel(st);
-        var flags = st["f"] != null ? st["f"] as Number : 0;
         var h = dc.getHeight();
         var barW = 14;
 
@@ -39,16 +38,21 @@ class StatusGlance extends WatchUi.GlanceView {
             dc.fillRectangle(0, 0, barW, h);
         }
 
-        var line2 = Ui.headline(level, flags);
-        if (level != Status.UNKNOWN && st["t"] != null) {
+        // Rows: region name, short level word, and "since HH:MM" if it fits (FR55 glance: 144x75).
+        var font = Graphics.FONT_GLANCE;
+        var rowH = dc.getFontHeight(font);
+        var rows = [Regions.nameOf(Settings.regionId()), Ui.shortLevel(level)] as Array<String>;
+        if (level != Status.UNKNOWN && st["t"] != null && rowH * 3 <= h) {
             var since = Ui.since(st["t"] as Number);
             if (since.length() > 0) {
-                line2 += " " + since;
+                rows.add(since);
             }
         }
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(barW + 6, h / 2, Graphics.FONT_GLANCE, Regions.nameOf(Settings.regionId()) + "\n" + line2,
-            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        var top = (h - rowH * rows.size()) / 2;
+        for (var i = 0; i < rows.size(); i++) {
+            dc.drawText(barW + 6, top + i * rowH, font, rows[i], Graphics.TEXT_JUSTIFY_LEFT);
+        }
     }
 }

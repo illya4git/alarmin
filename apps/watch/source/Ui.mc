@@ -39,6 +39,18 @@ module Ui {
         return "NO DATA";
     }
 
+    // One word per level, for the narrow glance.
+    function shortLevel(level as Number) as String {
+        if (level == Levels.RED) {
+            return "RED";
+        } else if (level == Levels.YELLOW) {
+            return "YELLOW";
+        } else if (level == Levels.GREEN) {
+            return "CLEAR";
+        }
+        return "NO DATA";
+    }
+
     // "since 14:05" for today, "since 17 Sep" for older; "" if unknown.
     function since(t as Number) as String {
         if (t <= 0) {
