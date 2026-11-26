@@ -12,6 +12,7 @@
     "gen-tree": "node scripts/gen-tree.ts",
     "gen-map": "node scripts/gen-map.ts",
     "gen-raions": "node scripts/gen-raions.ts",
+    "gen-zoom": "node scripts/gen-zoom.ts",
     "verify-upstream": "node scripts/verify-upstream.ts",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json"

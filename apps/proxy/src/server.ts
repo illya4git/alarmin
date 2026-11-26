@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { RAION_BY_ID, RAIONS_BY_OBLAST, REGION_BY_ID, REGIONS, Source } from '@alarmin/shared';
+import { RAION_BY_ID, RAIONS_BY_OBLAST, REGION_BY_ID, REGIONS, Source, ZOOM_EXTRAS } from '@alarmin/shared';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Snapshot, StatusSource } from './sources.ts';
@@ -136,13 +136,15 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
         return { m, t: Math.floor(snapshot.computedAt / 1000), ...freshness(), s: sourceCode() };
       });
 
-      // Raions of one oblast, one digit each in raion idx order (empty for regions without raions).
+      // Raions of one oblast, one digit each in raion idx order, then its ZOOM_EXTRAS regions (Kyiv
+      // city for Kyivska). Empty for regions without raions.
       v1.get<{ Params: { id: string } }>('/o/:id', async (req, reply) => {
         const id = Number(req.params.id);
         if (!Number.isInteger(id) || !REGION_BY_ID.has(id)) return reply.code(404).send({ e: 'region' });
         const snapshot = opts.status.snapshot;
         if (!snapshot) return reply.code(503).send({ e: 'warming' });
-        const m = (RAIONS_BY_OBLAST.get(id) ?? []).map((r) => digit(snapshot, r.id)).join('');
+        const ids = [...(RAIONS_BY_OBLAST.get(id) ?? []).map((r) => r.id), ...(ZOOM_EXTRAS.get(id) ?? [])];
+        const m = ids.map((rid) => digit(snapshot, rid)).join('');
         return { m, t: Math.floor(snapshot.computedAt / 1000), ...freshness(), s: sourceCode() };
       });
     },

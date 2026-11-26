@@ -48,14 +48,22 @@ class RaionPicker extends WatchUi.Menu2 {
         Menu2.initialize({});
         var current = Settings.regionId();
         addItem(new WatchUi.MenuItem(Regions.nameOf(oblastId), "Whole oblast", [oblastId, oblastId, ""], null));
+        // Rows are the oblast's zoom glyphs ([id, idx, x, y, name]): raions alphabetically, then
+        // other regions drawn in the zoom and "no data" shapes.
         var focus = 0;
+        var n = 1;
         for (var i = 0; i < raions.size(); i++) {
             var id = raions[i][0] as Number;
-            var name = raions[i][1] as String;
+            // Not selectable here: "no data" shapes and other regions drawn in the zoom (Kyiv city).
+            if ((raions[i][1] as Number) < 0 || Regions.indexOf(id) >= 0) {
+                continue;
+            }
+            var name = raions[i][4] as String;
             addItem(new WatchUi.MenuItem(name, null, [id, oblastId, name], null));
             if (id == current) {
-                focus = i + 1;
+                focus = n;
             }
+            n += 1;
         }
         setFocus(focus);
     }

@@ -83,12 +83,12 @@ describe('with fresh data', () => {
     assert.deepEqual(res.json(), { l: 2, f: 0, t: 1_764_000_100, a: 3, x: 0, s: 0 });
   });
 
-  test('/v1/o/:id returns one digit per raion in idx order', async () => {
+  test('/v1/o/:id returns one digit per raion in idx order, then its extra regions', async () => {
     const raions = RAIONS_BY_OBLAST.get(14) ?? [];
     const body = (await app.inject({ url: '/v1/o/14', headers: auth })).json() as { m: string; x: number; s: number };
-    assert.equal(body.m.length, raions.length);
+    assert.equal(body.m.length, raions.length + 1, 'raions, then Kyiv city (ZOOM_EXTRAS)');
     const idx = raions.find((r) => r.id === BILA_TSERKVA)?.idx ?? -1;
-    assert.equal(body.m, raions.map((r) => (r.idx === idx ? '2' : '0')).join(''));
+    assert.equal(body.m, `${raions.map((r) => (r.idx === idx ? '2' : '0')).join('')}2`);
     assert.equal(body.x, 0);
     assert.equal(body.s, 0);
   });

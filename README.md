@@ -28,6 +28,15 @@ Colours, per oblast (or Kyiv / Kharkiv / Zaporizhzhia city, or Crimea):
 
 **Data: siren.pp.ua and Tryvoha.online.** Thanks to both projects. Tryvoha.online's terms require this attribution wherever its data is used. The watch shows "via Tryvoha" while the proxy is serving Tryvoha data, and credits both sources in its About screen.
 
+### Map data
+
+| Source                                                                                                                           | Used for                    | Licence                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------- |
+| [Natural Earth](https://www.naturalearthdata.com) 1:10m admin-1, v5.1.2                                                          | Country map (oblasts)       | Public domain                                                 |
+| [OCHA Ukraine subnational administrative boundaries](https://data.humdata.org/dataset/cod-ab-ukr) (COD-AB) v05, valid 2025-09-01 | Zoomed oblast maps (raions) | [CC BY-IGO](https://creativecommons.org/licenses/by/3.0/igo/) |
+
+Raion boundaries: OCHA, via the Humanitarian Data Exchange; simplified and rasterized for a 208-px screen. The watch credits OCHA in its About screen.
+
 ## How it fits together
 
 ```
