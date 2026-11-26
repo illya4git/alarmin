@@ -1,21 +1,22 @@
-# Example: run the proxy container on any host (amd64 or arm64).
-# TLS, domain and reverse proxy are up to you; point your proxy at port 8080.
+# Run the proxy container on any host (amd64 or arm64).
+# TLS, domain and reverse proxy are up to you.
 #
-#   cp ../.env.example ../.env   # then set APP_KEYS
-#   docker compose --env-file ../.env up -d --build
+#   cp .env.example .env   # then set APP_KEYS
+#   docker compose up -d --build
 services:
   proxy:
     build:
-      context: ..
+      context: .
       dockerfile: apps/proxy/Dockerfile
     image: alarmin-proxy
-    env_file: ../.env
+    env_file: .env
     environment:
       # Behind a reverse proxy, take client IPs (for rate limiting) from X-Forwarded-For.
       TRUST_PROXY: "true"
     ports:
-      # Loopback only: expose it through your reverse proxy, not directly.
-      - "127.0.0.1:8080:8080"
+      # Default: loopback only, for a reverse proxy on the same host.
+      # Set PUBLISH in .env to change it, e.g. PUBLISH=80 to accept traffic on port 80.
+      - "${PUBLISH:-127.0.0.1:8080}:8080"
     restart: unless-stopped
     read_only: true
     security_opt:
