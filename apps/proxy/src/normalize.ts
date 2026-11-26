@@ -1,5 +1,5 @@
 /**
- * Turns raw Siren alerts into one state per top-level region (plan §3.1, D3):
+ * Turns raw upstream alerts into one state per top-level region (plan §3.1, D3):
  *
  * - RED    = the region itself has a Red air-raid alert, or every one of its raions does
  *            (upstream usually declares oblast-wide alerts raion by raion).
@@ -7,16 +7,22 @@
  *            separately announcing city with `parentId`) has an air-raid alert.
  * - GREEN  = otherwise.
  * Artillery and urban-fight alerts only set flags.
+ *
+ * Each source is first mapped to `Observed` alerts (`observeSiren`, `observeTryvoha`);
+ * `statesFrom` applies the rule above to either.
  */
-import { Flag, Level, REGION_BY_ID, REGIONS } from '@alarmin/shared';
+import { Flag, Level, REGION_BY_ID, REGION_BY_TRYVOHA_SLUG, REGIONS } from '@alarmin/shared';
 import type { RegionTree } from './regionTree.ts';
 import type { SirenAlertEntry } from './upstream/siren.ts';
+import type { TryvohaAlert } from './upstream/tryvoha.ts';
 
 export interface RegionState {
   level: Level;
   flags: number;
   /** Epoch seconds when the current level began; 0 if unknown. */
   since: number;
+  /** The serving source doesn't cover this region; the level is the last known one (or green if none). */
+  unknown?: boolean;
 }
 
 export interface DeclaredAlert {
@@ -27,7 +33,35 @@ export interface DeclaredAlert {
   createdAt: number;
 }
 
-/** De-duplicates alerts by the region that declared them (drops inherited copies). */
+/** One alert, placed relative to the top-level region it falls in. Source-neutral. */
+export interface Observed {
+  /** Top-level region (Siren ID, a key of `REGIONS`). */
+  top: number;
+  /** Declared on the region itself, on one of its raions, or deeper (hromada). */
+  scope: 'own' | 'raion' | 'sub';
+  /** Identifies the raion when `scope` is `raion` (counted against the tree's raion count). */
+  raion: string;
+  type: string;
+  level: 'Red' | 'Yellow';
+  /** Epoch ms; 0 if unknown. */
+  createdAt: number;
+}
+
+export interface Observation {
+  observed: Observed[];
+  /** Upstream region IDs or slugs that don't map to any known top-level region. */
+  unknown: (number | string)[];
+}
+
+// Unknown level strings are treated as Red: over-warning beats missing an alert.
+const toLevel = (s: string): 'Red' | 'Yellow' => (s === 'Yellow' || s === 'yellow' ? 'Yellow' : 'Red');
+
+const parseTime = (s: string | null | undefined): number => {
+  const t = Date.parse(s ?? '');
+  return Number.isFinite(t) ? t : 0;
+};
+
+/** De-duplicates Siren alerts by the region that declared them (drops inherited copies). */
 export function collectDeclared(entries: readonly SirenAlertEntry[]): DeclaredAlert[] {
   const byKey = new Map<string, DeclaredAlert>();
   for (const entry of entries) {
@@ -36,14 +70,12 @@ export function collectDeclared(entries: readonly SirenAlertEntry[]): DeclaredAl
         ? alert.activeAlertLevels
         : [{ alertLevel: 'Red', createdAt: alert.lastUpdate ?? '' }];
       for (const lvl of levels) {
-        // Unknown level strings are treated as Red: over-warning beats missing an alert.
-        const level = lvl.alertLevel === 'Yellow' ? 'Yellow' : 'Red';
-        const createdAt = Date.parse(lvl.createdAt);
+        const level = toLevel(lvl.alertLevel);
         const declared: DeclaredAlert = {
           regionId: Number(alert.regionId),
           type: alert.type,
           level,
-          createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+          createdAt: parseTime(lvl.createdAt),
         };
         const key = `${declared.regionId}|${declared.type}|${level}`;
         const existing = byKey.get(key);
@@ -54,57 +86,89 @@ export function collectDeclared(entries: readonly SirenAlertEntry[]): DeclaredAl
   return [...byKey.values()];
 }
 
+export function observeSiren(declared: readonly DeclaredAlert[], tree: RegionTree): Observation {
+  const observed: Observed[] = [];
+  const unknown = new Set<number>();
+  for (const d of declared) {
+    const top = tree.topOf(d.regionId);
+    if (!REGION_BY_ID.has(top)) {
+      unknown.add(d.regionId);
+      continue;
+    }
+    const scope = d.regionId === top ? 'own' : tree.parentOf(d.regionId) === top ? 'raion' : 'sub';
+    observed.push({ top, scope, raion: String(d.regionId), type: d.type, level: d.level, createdAt: d.createdAt });
+  }
+  return { observed, unknown: [...unknown] };
+}
+
+/** Tryvoha publishes air-raid alerts only. Its slugs map to Siren IDs via `packages/shared`. */
+export function observeTryvoha(alerts: readonly TryvohaAlert[]): Observation {
+  const observed: Observed[] = [];
+  const unknown = new Set<string>();
+  for (const a of alerts) {
+    const isState = a.type === 'state';
+    const slug = isState ? a.slug : (a.oblast_slug ?? '');
+    const region = REGION_BY_TRYVOHA_SLUG.get(slug);
+    if (!region) {
+      unknown.add(slug || a.slug);
+      continue;
+    }
+    observed.push({
+      top: region.id,
+      scope: isState ? 'own' : a.type === 'district' ? 'raion' : 'sub',
+      raion: a.slug,
+      type: 'AIR',
+      level: toLevel(a.level),
+      createdAt: parseTime(a.started_at),
+    });
+  }
+  return { observed, unknown: [...unknown] };
+}
+
 interface Acc {
   ownRed: number | null; // earliest createdAt (ms) of the region's own Red AIR alert
   ownYellow: number | null;
   partial: number | null; // earliest AIR alert anywhere below the region
-  redRaions: Map<number, number>; // raion id → createdAt of its own Red AIR alert
+  redRaions: Map<string, number>; // raion → createdAt of its own Red AIR alert
   flags: number;
 }
 
 const minTime = (a: number | null, b: number): number => (a === null ? b : Math.min(a, b));
 
-export interface NormalizeResult {
-  regions: Map<number, RegionState>;
-  /** Declared region IDs that don't map to any known top-level region. */
-  unknownRegionIds: number[];
-}
-
-export function computeStates(
-  declared: readonly DeclaredAlert[],
+/**
+ * Applies the D3 rule. `since` is kept from `previous` while a level holds, set to now on a
+ * transition, and estimated from upstream timestamps on cold start (`previous` null).
+ */
+export function statesFrom(
+  observed: readonly Observed[],
   tree: RegionTree,
   previous: ReadonlyMap<number, RegionState> | null,
   nowMs: number,
-): NormalizeResult {
+): Map<number, RegionState> {
   const acc = new Map<number, Acc>(
     REGIONS.map((r) => [r.id, { ownRed: null, ownYellow: null, partial: null, redRaions: new Map(), flags: 0 }]),
   );
-  const unknown = new Set<number>();
 
-  for (const alert of declared) {
-    const top = tree.topOf(alert.regionId);
-    const a = acc.get(top);
-    if (!a) {
-      unknown.add(alert.regionId);
-      continue;
-    }
-    if (alert.type === 'ARTILLERY') {
+  for (const o of observed) {
+    const a = acc.get(o.top);
+    if (!a) continue;
+    if (o.type === 'ARTILLERY') {
       a.flags |= Flag.Artillery;
       continue;
     }
-    if (alert.type === 'URBAN_FIGHTS') {
+    if (o.type === 'URBAN_FIGHTS') {
       a.flags |= Flag.UrbanFights;
       continue;
     }
-    if (alert.type !== 'AIR') continue;
+    if (o.type !== 'AIR') continue;
 
-    if (alert.regionId === top) {
-      if (alert.level === 'Red') a.ownRed = minTime(a.ownRed, alert.createdAt);
-      else a.ownYellow = minTime(a.ownYellow, alert.createdAt);
+    if (o.scope === 'own') {
+      if (o.level === 'Red') a.ownRed = minTime(a.ownRed, o.createdAt);
+      else a.ownYellow = minTime(a.ownYellow, o.createdAt);
     } else {
-      a.partial = minTime(a.partial, alert.createdAt);
-      if (alert.level === 'Red' && tree.parentOf(alert.regionId) === top) {
-        a.redRaions.set(alert.regionId, alert.createdAt);
+      a.partial = minTime(a.partial, o.createdAt);
+      if (o.level === 'Red' && o.scope === 'raion') {
+        a.redRaions.set(o.raion, Math.min(a.redRaions.get(o.raion) ?? o.createdAt, o.createdAt));
       }
     }
   }
@@ -122,8 +186,10 @@ export function computeStates(
   const nowS = Math.floor(nowMs / 1000);
   const regions = new Map<number, RegionState>();
   for (const [id, a] of acc) {
-    const raions = tree.childrenOf(id);
-    const allRaionsRed = raions.length > 0 && raions.every((r) => a.redRaions.has(r));
+    // Raions come from the Siren tree for both sources; Tryvoha uses its own raion slugs,
+    // so the check compares counts (the 2026-11-25 recording matched 1:1 this way).
+    const raionCount = tree.childrenOf(id).length;
+    const allRaionsRed = raionCount > 0 && a.redRaions.size >= raionCount;
     const red = a.ownRed !== null || allRaionsRed;
 
     let flags = a.flags;
@@ -142,7 +208,7 @@ export function computeStates(
       // Cold start: best guess from upstream timestamps.
       let startMs = 0;
       if (level === Level.Red) {
-        startMs = a.ownRed ?? Math.max(...raions.map((r) => a.redRaions.get(r) ?? 0));
+        startMs = a.ownRed ?? Math.max(0, ...a.redRaions.values());
       } else if (level === Level.Yellow) {
         startMs = Math.min(a.ownYellow ?? Number.POSITIVE_INFINITY, a.partial ?? Number.POSITIVE_INFINITY);
       }
@@ -151,6 +217,25 @@ export function computeStates(
 
     regions.set(id, { level, flags, since });
   }
+  return regions;
+}
 
-  return { regions, unknownRegionIds: [...unknown].filter((id) => !REGION_BY_ID.has(id)) };
+export interface NormalizeResult {
+  regions: Map<number, RegionState>;
+  /** Declared region IDs that don't map to any known top-level region. */
+  unknownRegionIds: number[];
+}
+
+/** Siren alerts → states (kept as one call for callers and tests that only deal with Siren). */
+export function computeStates(
+  declared: readonly DeclaredAlert[],
+  tree: RegionTree,
+  previous: ReadonlyMap<number, RegionState> | null,
+  nowMs: number,
+): NormalizeResult {
+  const { observed, unknown } = observeSiren(declared, tree);
+  return {
+    regions: statesFrom(observed, tree, previous, nowMs),
+    unknownRegionIds: unknown.filter((id): id is number => typeof id === 'number'),
+  };
 }

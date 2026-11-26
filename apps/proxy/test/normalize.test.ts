@@ -2,9 +2,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { BUNDLED_SIREN_PARENTS, Flag, Level, REGIONS } from '@alarmin/shared';
-import { collectDeclared, computeStates, type DeclaredAlert, type RegionState } from '../src/normalize.ts';
+import {
+  collectDeclared,
+  computeStates,
+  type DeclaredAlert,
+  observeTryvoha,
+  type RegionState,
+  statesFrom,
+} from '../src/normalize.ts';
 import { RegionTree } from '../src/regionTree.ts';
 import { type SirenAlertEntry, SirenAlertsSchema } from '../src/upstream/siren.ts';
+import { TryvohaAlertsSchema } from '../src/upstream/tryvoha.ts';
 
 const tree = new RegionTree(BUNDLED_SIREN_PARENTS);
 const NOW = Date.parse('2026-11-24T20:30:00Z');
@@ -165,5 +173,49 @@ describe('computeStates', () => {
   test('alerts outside the tree are reported, not applied', () => {
     const { unknownRegionIds } = computeStates([air(123456)], tree, null, NOW);
     assert.deepEqual(unknownRegionIds, [123456]);
+  });
+});
+
+/** Recorded tryvoha.online /api/v1/alerts at 2026-11-24 20:25:00 UTC (same minute as the Siren fixture). */
+const tryvohaFixture = TryvohaAlertsSchema.parse(
+  JSON.parse(readFileSync(new URL('./fixtures/tryvoha-alerts-20261124.json', import.meta.url), 'utf8')),
+).alerts;
+
+describe('tryvoha', () => {
+  const { observed, unknown } = observeTryvoha(tryvohaFixture);
+  const regions = statesFrom(observed, tree, null, NOW);
+
+  test('every slug in the recording maps to a region', () => {
+    assert.deepEqual(unknown, []);
+  });
+
+  test('the same D3 rule gives the same colours as Siren (except Crimea, which Tryvoha lacks)', () => {
+    const siren = computeStates(collectDeclared(fixture), tree, null, NOW).regions;
+    const diff = REGIONS.filter((r) => r.tryvohaSlug && siren.get(r.id)?.level !== regions.get(r.id)?.level).map(
+      (r) => `${r.nameLatin}: siren ${siren.get(r.id)?.level} tryvoha ${regions.get(r.id)?.level}`,
+    );
+    assert.deepEqual(diff, []);
+    assert.equal(regions.get(ID.crimea)?.level, Level.Green, 'not covered: the selector marks it unknown');
+  });
+
+  test('state, district and community alerts are placed by scope', () => {
+    const at = (slug: string) => observed.find((o) => o.raion === slug);
+    assert.equal(at('luganska-oblast')?.scope, 'own');
+    assert.equal(at('baxmutskii-raion')?.scope, 'raion');
+    assert.equal(at('baxmutskii-raion')?.top, ID.donetska);
+    assert.equal(at('lipecka-teritorialna-gromada')?.scope, 'sub');
+    assert.equal(at('lipecka-teritorialna-gromada')?.top, ID.kharkivska);
+    assert.ok(observed.some((o) => o.scope === 'raion'));
+  });
+
+  test('yellow and unknown levels', () => {
+    const { observed: o } = observeTryvoha([
+      { slug: 'kyiv', type: 'state', oblast_slug: 'kyiv', level: 'yellow', started_at: null },
+      { slug: 'lvivska', type: 'state', oblast_slug: 'lvivska', level: 'purple', started_at: null },
+    ]);
+    assert.deepEqual(
+      o.map((x) => x.level),
+      ['Yellow', 'Red'],
+    );
   });
 });

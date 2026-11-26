@@ -3,8 +3,8 @@ import { after, before, describe, test } from 'node:test';
 import { Flag, Level, REGIONS } from '@alarmin/shared';
 import type { FastifyInstance } from 'fastify';
 import type { RegionState } from '../src/normalize.ts';
-import type { StatusSource } from '../src/poller.ts';
 import { buildServer } from '../src/server.ts';
+import type { StatusSource } from '../src/sources.ts';
 
 const KEY = 'test-key-0123456789abcdef';
 const NOW = Date.parse('2026-11-24T20:30:00Z');
@@ -100,6 +100,26 @@ describe('degraded states', () => {
     assert.equal(res.json().x, 1);
     assert.equal(res.json().a, 120);
     assert.equal((await app.inject({ url: '/healthz' })).statusCode, 503);
+    await app.close();
+  });
+
+  test('a region the serving source lacks is flagged x=1 with its last level', async () => {
+    const status = makeStatus({ source: 'tryvoha', mode: 'fallback' });
+    const regions = status.snapshot ? (status.snapshot.regions as Map<number, RegionState>) : new Map();
+    regions.set(9999, {
+      level: Level.Red,
+      flags: 0,
+      since: 1,
+      unknown: true,
+    });
+    const app = await makeApp(status);
+    const crimea = (await app.inject({ url: '/v1/s/9999', headers: auth })).json();
+    assert.deepEqual(crimea, { l: 2, f: 0, t: 1, a: 3, x: 1 });
+    assert.equal((await app.inject({ url: '/v1/s/31', headers: auth })).json().x, 0);
+    assert.equal((await app.inject({ url: '/v1/meta', headers: auth })).json().src, 'tryvoha');
+    const health = (await app.inject({ url: '/healthz' })).json();
+    assert.equal(health.mode, 'fallback');
+    assert.deepEqual(health.uncoveredRegionIds, [9999]);
     await app.close();
   });
 });

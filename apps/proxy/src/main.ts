@@ -1,31 +1,44 @@
 import { BUNDLED_SIREN_PARENTS, BUNDLED_SIREN_TREE_DATE, parentsFromSirenStates } from '@alarmin/shared';
 import { loadConfig } from './config.ts';
-import { Poller } from './poller.ts';
+import { Feed, sirenFetcher, tryvohaCovers, tryvohaFetcher } from './feed.ts';
 import { RegionTree } from './regionTree.ts';
 import { buildServer } from './server.ts';
+import { SourceSelector } from './sources.ts';
 import { SirenClient } from './upstream/siren.ts';
+import { TryvohaClient } from './upstream/tryvoha.ts';
 
 const config = loadConfig();
 const siren = new SirenClient({ baseUrl: config.SIREN_BASE_URL, timeoutMs: config.UPSTREAM_TIMEOUT_MS });
 const tree = new RegionTree(BUNDLED_SIREN_PARENTS);
 
-// The poller needs a logger and the server needs the poller; a holder breaks the cycle.
-const holder: { poller?: Poller } = {};
+// The feeds need a logger and the server needs the selector; a holder breaks the cycle.
+const holder: { selector?: SourceSelector } = {};
 const app = await buildServer({
   status: {
     get snapshot() {
-      return holder.poller?.snapshot ?? null;
+      return holder.selector?.snapshot ?? null;
     },
     get lastOkAt() {
-      return holder.poller?.lastOkAt ?? 0;
+      return holder.selector?.lastOkAt ?? 0;
     },
     get consecutiveFailures() {
-      return holder.poller?.consecutiveFailures ?? 0;
+      return holder.selector?.consecutiveFailures ?? 0;
     },
     get lastError() {
-      return holder.poller?.lastError ?? null;
+      return holder.selector?.lastError ?? null;
     },
-    source: 'siren',
+    get source() {
+      return holder.selector?.source ?? 'siren';
+    },
+    get mode() {
+      return holder.selector?.mode;
+    },
+    get feeds() {
+      return holder.selector?.feeds;
+    },
+    get divergent() {
+      return holder.selector?.divergent;
+    },
   },
   appKeys: config.APP_KEYS,
   staleAfterMs: config.STALE_AFTER_MS,
@@ -34,13 +47,41 @@ const app = await buildServer({
   logger: { level: config.LOG_LEVEL },
 });
 
-const poller = new Poller({
-  fetchAlerts: (etag) => siren.alerts(etag),
+const sirenFeed = new Feed({
+  name: 'siren',
+  fetch: sirenFetcher(siren, tree),
   tree,
-  intervalMs: config.POLL_INTERVAL_MS,
+  intervalMs: () => config.POLL_INTERVAL_MS,
   log: app.log,
 });
-holder.poller = poller;
+
+let tryvohaFeed: Feed | null = null;
+if (config.TRYVOHA_ENABLED) {
+  const tryvoha = new TryvohaClient({ baseUrl: config.TRYVOHA_BASE_URL, timeoutMs: config.UPSTREAM_TIMEOUT_MS });
+  tryvohaFeed = new Feed({
+    name: 'tryvoha',
+    fetch: tryvohaFetcher(tryvoha),
+    tree,
+    intervalMs: () =>
+      holder.selector?.mode === 'fallback' ? config.TRYVOHA_FALLBACK_INTERVAL_MS : config.TRYVOHA_INTERVAL_MS,
+    log: app.log,
+    covers: tryvohaCovers,
+  });
+}
+
+const selector = new SourceSelector({
+  primary: sirenFeed,
+  fallback: tryvohaFeed,
+  log: app.log,
+  divergenceAfterMs: config.DIVERGENCE_AFTER_MS,
+  primaryFreshMs: config.STALE_AFTER_MS,
+  // One missed cross-check poll is fine; two in a row means the comparison is out of date.
+  fallbackFreshMs: 2 * config.TRYVOHA_INTERVAL_MS + config.UPSTREAM_TIMEOUT_MS,
+});
+holder.selector = selector;
+for (const feed of [sirenFeed, tryvohaFeed]) {
+  if (feed) feed.onTick = () => selector.evaluate();
+}
 
 async function refreshTree(): Promise<void> {
   try {
@@ -58,7 +99,9 @@ async function refreshTree(): Promise<void> {
 }
 
 app.log.info({ regions: tree.size, bundled: BUNDLED_SIREN_TREE_DATE }, 'using bundled region tree');
-poller.start();
+sirenFeed.start();
+tryvohaFeed?.start();
+app.log.info({ fallback: tryvohaFeed ? 'tryvoha' : null }, 'polling started');
 void refreshTree();
 const treeTimer = setInterval(() => void refreshTree(), config.TREE_REFRESH_MS);
 treeTimer.unref();
@@ -68,7 +111,8 @@ await app.listen({ host: config.HOST, port: config.PORT });
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
     app.log.info({ signal }, 'shutting down');
-    poller.stop();
+    sirenFeed.stop();
+    tryvohaFeed?.stop();
     clearInterval(treeTimer);
     await app.close();
     process.exit(0);

@@ -110,7 +110,7 @@ Checked live on 2026-11-24.
 - `PRIMARY` → `FALLBACK` after 3 failed Siren fetches in a row (HTTP error, timeout > 4 s, or zod schema failure), or no successful fetch for 30 s.
 - `FALLBACK` → `PRIMARY` after 3 successful Siren fetches in a row.
 - Both down → keep serving the last snapshot with `stale=1` and `age`.
-- Divergence (Siren and Tryvoha disagree on an oblast colour for more than 3 min) → log a warning and expose it in `/healthz`. No automatic switch; we'd be guessing which source is right. Regions Tryvoha doesn't cover (Crimea) are excluded from the check and reported as unknown (`x=1`) while in fallback, never as green.
+- Divergence (Siren and Tryvoha disagree on an oblast colour for more than 3 min) → log a warning and expose it in `/healthz`. No automatic switch; we'd be guessing which source is right. Regions Tryvoha doesn't cover (Crimea) are excluded from the check. While in fallback they keep their last known level and are reported stale (`x=1`), never as current green (on a cold start straight into fallback there is no last level: `l=0`, `x=1`).
 
 **Normalizer** → one `Snapshot`:
 
@@ -138,7 +138,7 @@ Oblast rule (D3, `apps/proxy/src/normalize.ts`): alerts are first de-duplicated 
 | `GET /v1/s/:id` | `{"l":2,"f":1,"t":1732460000,"a":4,"x":0}` (level, flags, since, data age in s, stale)                           | Glance/widget/background    |
 | `GET /v1/all`   | `{"m":"0021001…","t":…,"a":4,"x":0}` (`m` is one digit per oblast in the fixed map order from `packages/shared`) | Future map view             |
 | `GET /v1/meta`  | `{"v":1,"src":"siren","min":"0.1.0"}`                                                                            | Version check / attribution |
-| `GET /healthz`  | full JSON status (no auth, or a separate admin key)                                                              | Monitoring                  |
+| `GET /healthz`  | full JSON status, no auth: served source and mode, per-feed health, regions without coverage, divergences        | Monitoring                  |
 
 Versioned under `/v1` so the watch and proxy can evolve independently. Responses are built from the in-memory snapshot with no upstream call per request, so watch traffic is effectively free.
 
@@ -182,12 +182,13 @@ alarmin/
 ├─ apps/
 │  ├─ proxy/
 │  │  ├─ src/
-│  │  │  ├─ adapters/{siren,tryvoha}.ts   # fetch + zod schema → raw alerts
-│  │  │  ├─ normalize.ts                  # raw → Snapshot (D3 rules)
-│  │  │  ├─ poller.ts                     # timers, source state machine
-│  │  │  ├─ regions.ts                    # tree refresh + cache
-│  │  │  ├─ routes/{v1,health}.ts
-│  │  │  └─ server.ts
+│  │  │  ├─ upstream/{siren,tryvoha}.ts   # fetch + zod schema → raw alerts
+│  │  │  ├─ normalize.ts                  # raw → per-region states (D3 rules, both sources)
+│  │  │  ├─ feed.ts                       # one polled source: timer, health counters
+│  │  │  ├─ sources.ts                    # source state machine, divergence, served snapshot
+│  │  │  ├─ regionTree.ts                 # tree lookups (refreshed from Siren in main.ts)
+│  │  │  ├─ server.ts                     # /v1/* and /healthz
+│  │  │  └─ main.ts
 │  │  ├─ test/fixtures/                   # recorded real upstream payloads
 │  │  ├─ Dockerfile                       # multi-stage, non-root, node:22-alpine
 │  │  └─ package.json  tsconfig.json
@@ -221,7 +222,7 @@ alarmin/
 - [x] Can the background read `Storage`? Yes, and write it too on CIQ ≥ 3.2 (FR55 is 3.4; SDK docs). The background service updates `Storage` directly; `Background.exit` only signals a redraw.
 - [ ] Glance refresh: on a real FR55, does a `makeWebRequest` sent from glance `onStart` deliver its callback before the glance app is shut down? How often does the system re-render a visible glance? Can the glance pull the next background run forward (`registerForTemporalEvent(Moment)`)?
 - [ ] Confirm Cyrillic can't render on the FR55 (D8). Test a `Ї`/`Є` string in the simulator.
-- [ ] Confirm `makeWebRequest` custom header + HTTPS through Garmin Connect Mobile on a real phone.
+- [x] Confirm `makeWebRequest` custom header + HTTPS through Garmin Connect Mobile on a real phone (ngrok 2026-11-25, own domain 2026-11-26).
 - [ ] Send the ukrainealarm.com API key application. Message the Siren maintainer about acceptable polling rates.
 
 **Phase 1: Monorepo scaffold**
@@ -255,12 +256,15 @@ alarmin/
 
 **Phase 5: Resilience**
 
-- [ ] Tryvoha adapter, source state machine, divergence logging, stale propagation.
+- [x] Tryvoha adapter, source state machine, divergence logging, stale propagation (2026-11-26; `feed.ts`, `sources.ts`; verified live by pointing Siren at a dead port).
+- [ ] Watch: show the served source (`/v1/meta` `src`) so Tryvoha attribution appears while in fallback.
 - [ ] Attribution in About screen + README.
 
 **Phase 6: Personal deployment**
 
-- [ ] Run the container on a host of your choice behind your own HTTPS reverse proxy, uptime check on `/healthz`, sideload to the FR55, a week of real-world use.
+- [x] Container running behind an HTTPS reverse proxy, FR55 build pointing at it (2026-11-26).
+- [ ] Uptime check on `/healthz` (it returns 503 when stale; alert on that, and look at `mode` and `divergent`).
+- [ ] A week of real-world use, including the Phase 4 on-device checks.
 
 **Phase 7: Map view**
 
@@ -308,10 +312,11 @@ alarmin/
 | 2026-11-25 | FR55 over an ngrok tunnel: works end to end. Free ngrok answers browser-like User-Agents (the phone's request) with an HTML warning page, which the watch reports as -400.                                                                                                                                      | Watch always sends `ngrok-skip-browser-warning`; harmless elsewhere.                                                                                                                                                                                                                                                                       |
 | 2026-11-25 | FR55 UI review: glance needs short words (`RED`/`YELLOW`/`CLEAR`) with "since" on its own row; long footers clip on the round screen. In the simulator, Back from the widget ends the app (blue-triangle screen); it has no glance loop.                                                                        | 3-row glance; footer split into two short lines.                                                                                                                                                                                                                                                                                           |
 | 2026-11-25 | Container: the old image (448 MB) carried pnpm and its package store. Multi-stage build: 281 MB on amd64 (the Node binary is most of it); arm64 71 MB compressed / 193 MB unpacked. All dependencies are pure JS. amd64 run: healthy in ~2 s, 45–48 MiB RAM while polling, ~0 % CPU, stable after 300 requests. | `node_modules` built once on the build platform and copied into any target, so arm64 builds need no emulation (superseded 2026-11-26: the Dockerfile drops `$BUILDPLATFORM` for classic-builder support, so build natively on the target). Compose caps at 128 MiB / 0.5 CPU. Running arm64 itself needs QEMU or a real board (open item). |
+| 2026-11-26 | Deployed behind Caddy + Cloudflare. Cloudflare's Bot Fight Mode and Browser Integrity Check are off for the proxy host (the phone's requests aren't browser-like); a server without buildx needed the Dockerfile to work with the classic builder.                                                              | Deployment notes stay outside the repo (D12); Dockerfile kept classic-builder compatible.                                                                                                                                                                                                                                                  |
+| 2026-11-26 | Tryvoha fallback: on the 20:25 UTC recordings of 24 Nov, Tryvoha and Siren give the same colour for all 27 regions Tryvoha covers (now a unit test). Live: Siren on a dead port → fallback after 3 failures (~15 s), Crimea served as `x=1`, `/v1/meta` `src=tryvoha`.                                          | Phase 5 proxy side done.                                                                                                                                                                                                                                                                                                                   |
 
 ## 8. Open items
 
-- Where to host the container and which HTTPS reverse proxy to use (deployer's choice, outside this repo; needed by Phase 6).
 - Whether to keep a third fallback (Ubilling, oblast on/off only) in Phase 5.
 - App display name and icon.
 - Licence for the repo (MIT suggested).

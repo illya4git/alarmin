@@ -1,0 +1,267 @@
+{
+  "updated_at": "2026-11-24T20:24:58.239370Z",
+  "active": 29,
+  "alerts": [
+    {
+      "slug": "baxmutskii-raion",
+      "type": "district",
+      "name_uk": "Бахмутський район",
+      "name_en": "Bakhmutskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "berdianskii-raion",
+      "type": "district",
+      "name_uk": "Бердянський район",
+      "name_en": "Berdianskyi district",
+      "oblast_slug": "zaporizka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T17:21:03.000000Z"
+    },
+    {
+      "slug": "bilgorod-dnistrovskii-raion",
+      "type": "district",
+      "name_uk": "Білгород-Дністровський район",
+      "name_en": "Bilhorod-Dnistrovskyi district",
+      "oblast_slug": "odeska",
+      "level": "red",
+      "started_at": "2026-11-24T19:38:39.000000Z"
+    },
+    {
+      "slug": "bogoduxivskii-raion",
+      "type": "district",
+      "name_uk": "Богодухівський район",
+      "name_en": "Bohodukhivskyi district",
+      "oblast_slug": "xarkivska-oblast",
+      "level": "yellow",
+      "started_at": "2026-11-24T20:19:57.000000Z"
+    },
+    {
+      "slug": "bolgradskii-raion",
+      "type": "district",
+      "name_uk": "Болградський район",
+      "name_en": "Bolhradskyi district",
+      "oblast_slug": "odeska",
+      "level": "red",
+      "started_at": "2026-11-24T19:38:54.000000Z"
+    },
+    {
+      "slug": "vasilivskii-raion",
+      "type": "district",
+      "name_uk": "Василівський район",
+      "name_en": "Vasylivskyi district",
+      "oblast_slug": "zaporizka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T17:21:03.000000Z"
+    },
+    {
+      "slug": "volnovaskii-raion",
+      "type": "district",
+      "name_uk": "Волноваський район",
+      "name_en": "Volnovaskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "gorlivskii-raion",
+      "type": "district",
+      "name_uk": "Горлівський район",
+      "name_en": "Horlivskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "dniprovskii-raion",
+      "type": "district",
+      "name_uk": "Дніпровський район",
+      "name_en": "Dniprovskyi district",
+      "oblast_slug": "dnipropetrovska",
+      "level": "red",
+      "started_at": "2026-11-24T20:04:46.000000Z"
+    },
+    {
+      "slug": "doneckii-raion",
+      "type": "district",
+      "name_uk": "Донецький район",
+      "name_en": "Donetskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "zaporizkii-raion",
+      "type": "district",
+      "name_uk": "Запорізький район",
+      "name_en": "Zaporizkyi district",
+      "oblast_slug": "zaporizka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T17:21:03.000000Z"
+    },
+    {
+      "slug": "izmayilskii-raion",
+      "type": "district",
+      "name_uk": "Ізмаїльський район",
+      "name_en": "Izmailskyi district",
+      "oblast_slug": "odeska",
+      "level": "red",
+      "started_at": "2026-11-24T19:38:46.000000Z"
+    },
+    {
+      "slug": "kalmiuskii-raion",
+      "type": "district",
+      "name_uk": "Кальміуський район",
+      "name_en": "Kalmiuskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "kramatorskii-raion",
+      "type": "district",
+      "name_uk": "Краматорський район",
+      "name_en": "Kramatorskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "lipecka-teritorialna-gromada",
+      "type": "community",
+      "name_uk": "Липецька територіальна громада",
+      "name_en": "Lypetska community",
+      "oblast_slug": "xarkivska-oblast",
+      "level": "red",
+      "started_at": "2026-03-10T14:01:38.000000Z"
+    },
+    {
+      "slug": "luganska-oblast",
+      "type": "state",
+      "name_uk": "Луганська область",
+      "name_en": "Luhanska region",
+      "oblast_slug": "luganska-oblast",
+      "level": "red",
+      "started_at": "2026-11-01T22:11:31.000000Z"
+    },
+    {
+      "slug": "m-zaporizzia-ta-zaporizka-teritorialna-gromada",
+      "type": "state",
+      "name_uk": "м. Запоріжжя та Запорізька територіальна громада",
+      "name_en": "Zaporizhzhia and Zaporizka community",
+      "oblast_slug": "m-zaporizzia-ta-zaporizka-teritorialna-gromada",
+      "level": "red",
+      "started_at": "2026-11-24T17:21:07.000000Z"
+    },
+    {
+      "slug": "mariupolskii-raion",
+      "type": "district",
+      "name_uk": "Маріупольський район",
+      "name_en": "Mariupolskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "melitopolskii-raion",
+      "type": "district",
+      "name_uk": "Мелітопольський район",
+      "name_en": "Melitopolskyi district",
+      "oblast_slug": "zaporizka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T17:21:03.000000Z"
+    },
+    {
+      "slug": "nikopolskii-raion",
+      "type": "district",
+      "name_uk": "Нікопольський район",
+      "name_en": "Nikopolskyi district",
+      "oblast_slug": "dnipropetrovska",
+      "level": "yellow",
+      "started_at": "2026-11-24T19:54:34.000000Z"
+    },
+    {
+      "slug": "pavlogradskii-raion",
+      "type": "district",
+      "name_uk": "Павлоградський район",
+      "name_en": "Pavlohradskyi district",
+      "oblast_slug": "dnipropetrovska",
+      "level": "red",
+      "started_at": "2026-11-24T19:58:59.000000Z"
+    },
+    {
+      "slug": "pokrovska-teritorialna-gromada",
+      "type": "community",
+      "name_uk": "Покровська територіальна громада",
+      "name_en": "Pokrovska community",
+      "oblast_slug": "dnipropetrovska",
+      "level": "yellow",
+      "started_at": "2026-09-17T10:06:09.000000Z"
+    },
+    {
+      "slug": "pokrovskii-raion",
+      "type": "district",
+      "name_uk": "Покровський район",
+      "name_en": "Pokrovskyi district",
+      "oblast_slug": "donecka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T05:11:10.000000Z"
+    },
+    {
+      "slug": "pologivskii-raion",
+      "type": "district",
+      "name_uk": "Пологівський район",
+      "name_en": "Polohivskyi district",
+      "oblast_slug": "zaporizka-oblast",
+      "level": "red",
+      "started_at": "2026-11-24T17:21:03.000000Z"
+    },
+    {
+      "slug": "samarivskii-raion",
+      "type": "district",
+      "name_uk": "Самарівський район",
+      "name_en": "Samarivskyi district",
+      "oblast_slug": "dnipropetrovska",
+      "level": "red",
+      "started_at": "2026-11-24T20:04:39.000000Z"
+    },
+    {
+      "slug": "sinelnikivskii-raion",
+      "type": "district",
+      "name_uk": "Синельниківський район",
+      "name_en": "Synelnykivskyi district",
+      "oblast_slug": "dnipropetrovska",
+      "level": "red",
+      "started_at": "2026-11-24T05:10:58.000000Z"
+    },
+    {
+      "slug": "sumskii-raion",
+      "type": "district",
+      "name_uk": "Сумський район",
+      "name_en": "Sumskyi district",
+      "oblast_slug": "sumska-oblast",
+      "level": "yellow",
+      "started_at": "2026-11-24T20:05:46.000000Z"
+    },
+    {
+      "slug": "xarkivskii-raion",
+      "type": "district",
+      "name_uk": "Харківський район",
+      "name_en": "Kharkivskyi district",
+      "oblast_slug": "xarkivska-oblast",
+      "level": "yellow",
+      "started_at": "2026-11-24T20:19:17.000000Z"
+    },
+    {
+      "slug": "cervonogrigorivska-teritorialna-gromada",
+      "type": "community",
+      "name_uk": "Червоногригорівська територіальна громада",
+      "name_en": "Chervonohryhorivska community",
+      "oblast_slug": "dnipropetrovska",
+      "level": "yellow",
+      "started_at": "2026-09-17T10:06:55.000000Z"
+    }
+  ]
+}

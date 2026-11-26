@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { REGION_BY_ID, REGIONS } from '@alarmin/shared';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
-import type { StatusSource } from './poller.ts';
+import type { StatusSource } from './sources.ts';
 
 export const API_VERSION = 1;
 /** Oldest watch app version this proxy supports (reported in /v1/meta). */
@@ -57,6 +57,7 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
     return {
       ok: Boolean(s.snapshot) && !x,
       source: s.source,
+      mode: s.mode ?? 'primary',
       lastOkAt: s.lastOkAt ? new Date(s.lastOkAt).toISOString() : null,
       ageSeconds: a,
       stale: Boolean(x),
@@ -64,6 +65,17 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
       lastError: s.lastError,
       regions: { green: counts[0], yellow: counts[1], red: counts[2] },
       unknownRegionIds: s.snapshot?.unknownRegionIds ?? [],
+      uncoveredRegionIds: [...(s.snapshot?.regions ?? [])].filter(([, st]) => st.unknown).map(([id]) => id),
+      feeds: (s.feeds ?? []).map((f) => ({
+        source: f.source,
+        lastOkAt: f.lastOkAt ? new Date(f.lastOkAt).toISOString() : null,
+        consecutiveFailures: f.consecutiveFailures,
+        lastError: f.lastError,
+      })),
+      divergent: (s.divergent ?? []).map((d) => ({
+        ...d,
+        since: new Date(d.since).toISOString(),
+      })),
     };
   });
 
@@ -88,7 +100,9 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
         if (!Number.isInteger(id) || !REGION_BY_ID.has(id)) return reply.code(404).send({ e: 'region' });
         const state = opts.status.snapshot?.regions.get(id);
         if (!state) return reply.code(503).send({ e: 'warming' });
-        return { l: state.level, f: state.flags, t: state.since, ...freshness() };
+        const fresh = freshness();
+        // A region the serving source doesn't cover is reported stale, never as current.
+        return { l: state.level, f: state.flags, t: state.since, a: fresh.a, x: state.unknown ? 1 : fresh.x };
       });
 
       v1.get('/all', async (_req, reply) => {
