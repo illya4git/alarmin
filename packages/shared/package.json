@@ -10,6 +10,7 @@
   "scripts": {
     "codegen": "node scripts/gen-monkeyc.ts",
     "gen-tree": "node scripts/gen-tree.ts",
+    "gen-map": "node scripts/gen-map.ts",
     "verify-upstream": "node scripts/verify-upstream.ts",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json"

@@ -21,6 +21,9 @@ apps/watch/source/generated/Secrets.mc
 # Raw upstream recordings (large; curated fixtures live in apps/proxy/test/fixtures)
 spikes/*/data/
 
+# Downloaded map source (packages/shared/scripts/gen-map.ts)
+packages/shared/.cache/
+
 # Editors / OS
 .vscode/*
 !.vscode/extensions.json

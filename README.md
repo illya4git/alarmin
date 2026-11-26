@@ -7,7 +7,7 @@ Ukrainian air-raid alert status on a Garmin watch (Forerunner 55 first), served 
 ## What it does
 
 - **Glance:** your region's colour, name and "since" time.
-- **Widget:** the same status in full screen, refreshed every 10 seconds while open.
+- **Widget:** the same status in full screen, refreshed every 10 seconds while open. DOWN shows a map of Ukraine coloured by region, DOWN again the menu (region, about).
 - **Background check every 5 minutes:** when the colour changes, the watch shows a prompt (one vibration). Open it to see the new status.
 
 Colours, per oblast (or Kyiv / Kharkiv / Zaporizhzhia city, or Crimea):
