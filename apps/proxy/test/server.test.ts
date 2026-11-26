@@ -52,7 +52,7 @@ describe('with fresh data', () => {
   test('/v1/s/:id returns the compact state', async () => {
     const res = await app.inject({ url: '/v1/s/31', headers: auth });
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.json(), { l: 2, f: 0, t: 1_764_000_000, a: 3, x: 0 });
+    assert.deepEqual(res.json(), { l: 2, f: 0, t: 1_764_000_000, a: 3, x: 0, s: 0 });
     assert.equal(res.headers['cache-control'], 'no-store');
     assert.ok(res.body.length < 64, `payload ${res.body.length} bytes`);
   });
@@ -114,7 +114,7 @@ describe('degraded states', () => {
     });
     const app = await makeApp(status);
     const crimea = (await app.inject({ url: '/v1/s/9999', headers: auth })).json();
-    assert.deepEqual(crimea, { l: 2, f: 0, t: 1, a: 3, x: 1 });
+    assert.deepEqual(crimea, { l: 2, f: 0, t: 1, a: 3, x: 1, s: 1 });
     assert.equal((await app.inject({ url: '/v1/s/31', headers: auth })).json().x, 0);
     assert.equal((await app.inject({ url: '/v1/meta', headers: auth })).json().src, 'tryvoha');
     const health = (await app.inject({ url: '/healthz' })).json();

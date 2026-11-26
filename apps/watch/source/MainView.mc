@@ -102,7 +102,9 @@ class MainView extends WatchUi.View {
         if (st["x"] == 1) {
             return "Source down\n" + Ui.age(age);
         }
-        return "Updated " + Ui.age(age);
+        // Tryvoha's terms require credit wherever its data is shown.
+        return "Updated " + Ui.age(age) + (st["s"] == Levels.SOURCE_TRYVOHA ? "
+via Tryvoha" : "");
     }
 }
 
@@ -111,17 +113,9 @@ class MainDelegate extends WatchUi.BehaviorDelegate {
         BehaviorDelegate.initialize();
     }
 
-    // START or long-press UP opens the region picker.
-    function onSelect() as Boolean {
-        return openPicker();
-    }
-
-    function onMenu() as Boolean {
-        return openPicker();
-    }
-
-    private function openPicker() as Boolean {
-        WatchUi.pushView(new RegionPicker(), new RegionPickerDelegate(), WatchUi.SLIDE_LEFT);
+    // Pages (plan §3.5): DOWN → map. START is left free for a future status action.
+    function onNextPage() as Boolean {
+        WatchUi.switchToView(new MapView(), new MapDelegate(), WatchUi.SLIDE_UP);
         return true;
     }
 }

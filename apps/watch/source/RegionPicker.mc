@@ -29,7 +29,7 @@ class RegionPickerDelegate extends WatchUi.Menu2InputDelegate {
         if (id instanceof Number) {
             Settings.setRegionId(id);
         }
-        // MainView.onShow refetches for the new region.
+        // Back to the menu; MainView.onShow refetches for the new region.
         WatchUi.popView(WatchUi.SLIDE_RIGHT);
     }
 }

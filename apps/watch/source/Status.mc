@@ -6,6 +6,7 @@ import Toybox.Time;
 // glance can draw without a network call. Stored as a flat dictionary:
 //   "r" region id, "l" level, "f" flags, "t" since (epoch s, 0 = unknown),
 //   "ft" fetched at (watch epoch s), "a" proxy data age at fetch (s), "x" proxy stale flag,
+//   "s" source the proxy served (Levels.SOURCE_*),
 //   "e" last error code (0 = ok), "et" when that error happened.
 // Written by the glance, the widget and (API >= 3.2) the background service.
 (:background, :glance)
@@ -60,6 +61,7 @@ module Status {
             "t" => toNumber(data["t"], 0),
             "a" => toNumber(data["a"], 0),
             "x" => toNumber(data["x"], 0),
+            "s" => toNumber(data["s"], Levels.SOURCE_SIREN),
             "ft" => Time.now().value(),
             "e" => 0,
             "et" => 0

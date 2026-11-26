@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { REGION_BY_ID, REGIONS } from '@alarmin/shared';
+import { REGION_BY_ID, REGIONS, Source } from '@alarmin/shared';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { StatusSource } from './sources.ts';
@@ -102,7 +102,14 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
         if (!state) return reply.code(503).send({ e: 'warming' });
         const fresh = freshness();
         // A region the serving source doesn't cover is reported stale, never as current.
-        return { l: state.level, f: state.flags, t: state.since, a: fresh.a, x: state.unknown ? 1 : fresh.x };
+        return {
+          l: state.level,
+          f: state.flags,
+          t: state.since,
+          a: fresh.a,
+          x: state.unknown ? 1 : fresh.x,
+          s: opts.status.source === 'tryvoha' ? Source.Tryvoha : Source.Siren,
+        };
       });
 
       v1.get('/all', async (_req, reply) => {

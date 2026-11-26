@@ -133,12 +133,12 @@ Oblast rule (D3, `apps/proxy/src/normalize.ts`): alerts are first de-duplicated 
 
 **Watch-facing API**: tiny JSON with short keys, meant to be parsed in a few hundred bytes.
 
-| Endpoint        | Response                                                                                                         | Use                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `GET /v1/s/:id` | `{"l":2,"f":1,"t":1732460000,"a":4,"x":0}` (level, flags, since, data age in s, stale)                           | Glance/widget/background    |
-| `GET /v1/all`   | `{"m":"0021001…","t":…,"a":4,"x":0}` (`m` is one digit per oblast in the fixed map order from `packages/shared`) | Future map view             |
-| `GET /v1/meta`  | `{"v":1,"src":"siren","min":"0.1.0"}`                                                                            | Version check / attribution |
-| `GET /healthz`  | full JSON status, no auth: served source and mode, per-feed health, regions without coverage, divergences        | Monitoring                  |
+| Endpoint        | Response                                                                                                                                                                       | Use                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
+| `GET /v1/s/:id` | `{"l":2,"f":1,"t":1732460000,"a":4,"x":0,"s":0}` (level, flags, since, data age in s, stale, source: 0 Siren, 1 Tryvoha)                                                       | Glance/widget/background    |
+| `GET /v1/all`   | `{"m":"0021001…","t":…,"a":4,"x":0}` (`m` is one digit per oblast in the fixed map order from `packages/shared`; Phase 7 adds `3` = unknown, e.g. Crimea in fallback, and `s`) | Map page (§3.5)             |
+| `GET /v1/meta`  | `{"v":1,"src":"siren","min":"0.1.0"}`                                                                                                                                          | Version check / attribution |
+| `GET /healthz`  | full JSON status, no auth: served source and mode, per-feed health, regions without coverage, divergences                                                                      | Monitoring                  |
 
 Versioned under `/v1` so the watch and proxy can evolve independently. Responses are built from the in-memory snapshot with no upstream call per request, so watch traffic is effectively free.
 
@@ -149,7 +149,7 @@ App type: **widget with a glance**.
 | Part                            | Memory | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `(:glance)` GlanceView          | 32 KB  | Draws from `Storage`: colour block or ring, Latin region name, "since HH:MM", data age. On each start it also sends one throttled `makeWebRequest` (if the reply lands, it goes into `Storage` for the next draw; must be verified in Phase 0). The FR55 renders glances in "background UI update" mode: the system starts the app, draws once and caches the image, redraws at most every ~30 s while visible, and ignores `requestUpdate()`, so a glance can't poll continuously.                                    |
-| WidgetView                      | 64 KB  | Large status; while open, `Timer` every **10 s** → `makeWebRequest /v1/s/:id`. Long press / menu → region picker (`Menu2`, 27 items generated from shared). Later: map page.                                                                                                                                                                                                                                                                                                                                           |
+| WidgetView                      | 64 KB  | Large status; while open, `Timer` every **10 s** → `makeWebRequest /v1/s/:id`. DOWN → map page, DOWN again → main menu (§3.5).                                                                                                                                                                                                                                                                                                                                                                        |
 | `(:background)` ServiceDelegate | 32 KB  | `registerForTemporalEvent(5 min)`. Fetches `/v1/s/:id`, compares with the last stored level (same region only; not on stale data), writes `Storage` directly (CIQ ≥ 3.2), `Background.exit(true)`. On change → `requestApplicationWake(msg)`, then `exit()` (the dialog appears only after exit). `msg` is short, with the important word first, e.g. `"Kyivska: RED"`, `"Kyivska: yellow"`, `"Kyivska: all clear"`. The dialog wraps at ~14 characters per line in a large font, and the buttons take the lower half. |
 | App `onBackgroundData`          | —      | `WatchUi.requestUpdate()` (the background already wrote `Storage`).                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Settings                        | —      | `properties.xml` + `settings.xml`: region list (also editable in the Garmin Connect app), proxy URL. Future alarm toggles reserved here (D6).                                                                                                                                                                                                                                                                                                                                                                          |
@@ -169,6 +169,20 @@ App type: **widget with a glance**.
 ### 3.4 Region IDs (raion-ready)
 
 The canonical ID is the **ukrainealarm/Siren `regionId`**. `packages/shared/regions.ts` holds for each oblast: `id`, `sirenId`, `tryvohaSlug`, `nameUk`, `nameLatin`, `mapIndex`. Raions are added later as a generated file from `/api/v3/regions` (with Tryvoha slugs matched by name). The watch API already takes any `:id`, so raion support is UI-only work plus a two-step picker.
+
+### 3.5 Target UI (widget pages)
+
+The full widget has three pages. The glance stays as it is (§3.2).
+
+| #   | Page                | Content                                                                                                                                                                                                                                                                                                                                         | Network                                  | Memory                                                                                                       |
+| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 1   | **Status** (as now) | Region colour fills the screen; region name, headline (`AIR ALERT` / `THREAT` / `PARTIAL` / `CLEAR` / `NO DATA`), "since", shelling marker. Footer: freshness or error; a second line `via Tryvoha` while the proxy serves Tryvoha.                                                                                                             | `/v1/s/:id` every **10 s** while visible | Small: nothing beyond `Status` is loaded                                                                     |
+| 2   | **Minimap**         | Whole of Ukraine on a black background, each oblast filled red / yellow / green from `/v1/all`, white outlines. The selected region gets a thick white outline (or a blinking dot for the three cities, which are too small to fill). Grey hatch for unknown (`3`, e.g. Crimea in fallback). One footer line: freshness, or `3 red · 9 yellow`. | `/v1/all` every **15 s** while visible   | Polygons loaded from a resource only when the page is shown and released on hide; budget measured in Phase 7 |
+| 3   | **Menu**            | Native `Menu2`: **Region** (sublabel = current; opens the picker), **Alerts** (toggles: prompt on red / yellow / all clear → `alRed`, `alYellow`, `alGreen`), **About** (disclaimer, data credits, source now in use).                                                                                                                          | none                                     | `Menu2` only                                                                                                 |
+
+**Navigation (FR55: no touch, 5 buttons).** DOWN / UP step through the pages: status → map → menu, and inside the menu DOWN / UP move through its items. UP from the first menu item (or BACK) returns to the map; the menu doesn't wrap. START is kept free on the status and map pages for a later page-specific action. BACK on the status or map page leaves the widget. Built with our own delegates (`switchToView` between status and map, `pushView` for the menu, `Menu2InputDelegate.onWrap` for UP at the top), not `ViewLoop`, so the menu can be the third step. Page dots can be drawn by hand later if they're missed.
+
+**Done so far (2026-11-26):** the three-page navigation; page 2 is a placeholder that polls `/v1/all` every 15 s and shows the number of regions per colour; page 3 has Region and About. The minimap itself and the Alerts submenu are Phase 7.
 
 ---
 
@@ -194,7 +208,7 @@ alarmin/
 │  │  └─ package.json  tsconfig.json
 │  └─ watch/                              # plain Monkey C project (not a pnpm package)
 │     ├─ manifest.xml  monkey.jungle
-│     ├─ source/{App,GlanceView,WidgetView,Background,Api,Picker}.mc
+│     ├─ source/{AlarminApp,StatusGlance,MainView,MainMenu,RegionPicker,AboutView,BackgroundService,…}.mc
 │     ├─ source/generated/Regions.mc      # ← codegen, committed
 │     └─ resources/{strings,settings,properties,drawables}/
 ├─ packages/
@@ -257,8 +271,7 @@ alarmin/
 **Phase 5: Resilience**
 
 - [x] Tryvoha adapter, source state machine, divergence logging, stale propagation (2026-11-26; `feed.ts`, `sources.ts`; verified live by pointing Siren at a dead port).
-- [ ] Watch: show the served source (`/v1/meta` `src`) so Tryvoha attribution appears while in fallback.
-- [ ] Attribution in About screen + README.
+- [x] Attribution: `/v1/s` reports the source (`s`), the status footer says `via Tryvoha` in fallback, About screen and README credit both sources and carry the disclaimer (2026-11-26).
 
 **Phase 6: Personal deployment**
 
@@ -266,15 +279,19 @@ alarmin/
 - [ ] Uptime check on `/healthz` (it returns 503 when stale; alert on that, and look at `mode` and `divergent`).
 - [ ] A week of real-world use, including the Phase 4 on-device checks.
 
-**Phase 7: Map view**
+**Phase 7: Pages and map (target UI, §3.5)**
 
+- [x] Page navigation status → map → menu with DOWN / UP; menu with Region and About; map placeholder with counts from `/v1/all`.
+- [ ] Try the navigation on the FR55 (does the system pass UP / DOWN to the widget, or use them to leave it?).
+- [ ] Alerts submenu: toggles for `alRed`, `alYellow`, `alGreen` (also in the phone settings).
+- [ ] `/v1/all`: digit `3` for regions the serving source doesn't cover, plus `s`.
 - [ ] Simplify oblast polygons (e.g. mapshaper) → quantize to the 208-px grid → codegen packed coordinate arrays (resource JSON or Monkey C arrays). Measure memory against the 64 KB widget budget.
-- [ ] Map page fills each oblast from `/v1/all`, highlights the selected one.
+- [ ] Map page fills each oblast from `/v1/all`, highlights the selected one, polls every 15 s while visible.
 
 **Phase 8: Later**
 
 - [ ] Raion selection (two-step picker, generated raion table).
-- [ ] Configurable alarms (per-transition toggles, quiet hours).
+- [ ] More alarm options (quiet hours, per-transition rules).
 - [ ] Cyrillic custom font (if memory allows).
 - [ ] More devices (`manifest.xml` products, layout per resolution).
 - [ ] Store readiness: per-device tokens, privacy note, official ukrainealarm key, ToS review of all sources.

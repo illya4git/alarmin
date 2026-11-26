@@ -100,4 +100,8 @@ module Levels {
     const FLAG_PARTIAL = 2;
     const FLAG_ARTILLERY = 4;
     const FLAG_URBAN_FIGHTS = 8;
+
+    // Source the proxy is serving (`s`).
+    const SOURCE_SIREN = 0;
+    const SOURCE_TRYVOHA = 1;
 }

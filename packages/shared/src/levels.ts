@@ -6,6 +6,13 @@ export const Level = {
 } as const;
 export type Level = (typeof Level)[keyof typeof Level];
 
+/** Upstream source the proxy is serving (`s` in the watch API). Credit it on the watch (plan §2). */
+export const Source = {
+  Siren: 0,
+  Tryvoha: 1,
+} as const;
+export type Source = (typeof Source)[keyof typeof Source];
+
 /** Bit flags explaining a level (`f` in the watch API). */
 export const Flag = {
   /** The region itself has a Yellow (warning of possible threat) air-raid level. */

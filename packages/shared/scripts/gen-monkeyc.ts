@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Flag, Level } from '../src/levels.ts';
+import { Flag, Level, Source } from '../src/levels.ts';
 import { DEFAULT_REGION_ID, REGIONS } from '../src/regions.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -62,6 +62,10 @@ module Levels {
     const FLAG_PARTIAL = ${Flag.Partial};
     const FLAG_ARTILLERY = ${Flag.Artillery};
     const FLAG_URBAN_FIGHTS = ${Flag.UrbanFights};
+
+    // Source the proxy is serving (\`s\`).
+    const SOURCE_SIREN = ${Source.Siren};
+    const SOURCE_TRYVOHA = ${Source.Tryvoha};
 }
 `;
 
