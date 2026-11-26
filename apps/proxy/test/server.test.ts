@@ -70,6 +70,7 @@ describe('with fresh data', () => {
     const kyivska = REGIONS.find((r) => r.id === 14);
     assert.equal(body.m[kyivCity?.idx ?? -1], '2');
     assert.equal(body.m[kyivska?.idx ?? -1], '1');
+    assert.equal((body as { s?: number }).s, 0);
   });
 
   test('/v1/meta', async () => {
@@ -117,6 +118,10 @@ describe('degraded states', () => {
     assert.deepEqual(crimea, { l: 2, f: 0, t: 1, a: 3, x: 1, s: 1 });
     assert.equal((await app.inject({ url: '/v1/s/31', headers: auth })).json().x, 0);
     assert.equal((await app.inject({ url: '/v1/meta', headers: auth })).json().src, 'tryvoha');
+    const all = (await app.inject({ url: '/v1/all', headers: auth })).json();
+    const crimeaIdx = REGIONS.find((r) => r.id === 9999)?.idx ?? -1;
+    assert.equal(all.m[crimeaIdx], '3', 'uncovered region is unknown on the map, not its last colour');
+    assert.equal(all.s, 1);
     const health = (await app.inject({ url: '/healthz' })).json();
     assert.equal(health.mode, 'fallback');
     assert.deepEqual(health.uncoveredRegionIds, [9999]);

@@ -23,11 +23,18 @@ module Settings {
         return Secrets.PROXY_URL;
     }
 
-    // Whether a change to `level` should trigger the wake prompt (plan D6; all on for now).
+    // Whether a change to `level` should trigger the wake prompt (plan D6; default on).
     function alarmEnabled(level as Number) as Boolean {
-        var key = level == Levels.RED ? "alRed" : level == Levels.YELLOW ? "alYellow" : "alGreen";
-        var v = Properties.getValue(key);
+        var v = Properties.getValue(alarmKey(level));
         return !(v instanceof Boolean) || v;
+    }
+
+    function setAlarmEnabled(level as Number, on as Boolean) as Void {
+        Properties.setValue(alarmKey(level), on);
+    }
+
+    function alarmKey(level as Number) as String {
+        return level == Levels.RED ? "alRed" : level == Levels.YELLOW ? "alYellow" : "alGreen";
     }
 
     // URL of the status endpoint for a region.

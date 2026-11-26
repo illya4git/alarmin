@@ -3,6 +3,9 @@
     <strings>
         <string id="SettingRegionTitle">Region</string>
         <string id="SettingProxyTitle">Proxy URL (empty = built-in)</string>
+        <string id="SettingAlRedTitle">Prompt on air alert (red)</string>
+        <string id="SettingAlYellowTitle">Prompt on partial / threat (yellow)</string>
+        <string id="SettingAlGreenTitle">Prompt on all clear</string>
         <string id="Region24">Cherkaska</string>
         <string id="Region25">Chernihivska</string>
         <string id="Region26">Chernivetska</string>
@@ -36,7 +39,7 @@
     <properties>
         <property id="regionId" type="number">31</property>
         <property id="proxyUrl" type="string"></property>
-        <!-- Wake prompt per new level (plan D6). No settings UI yet; all on. -->
+        <!-- Wake prompt per new level (plan D6); watch menu Alerts and the phone settings. -->
         <property id="alRed" type="boolean">true</property>
         <property id="alYellow" type="boolean">true</property>
         <property id="alGreen" type="boolean">true</property>
@@ -74,6 +77,15 @@
                 <listEntry value="12">@Strings.Region12</listEntry>
                 <listEntry value="10">@Strings.Region10</listEntry>
             </settingConfig>
+        </setting>
+        <setting propertyKey="@Properties.alRed" title="@Strings.SettingAlRedTitle">
+            <settingConfig type="boolean" />
+        </setting>
+        <setting propertyKey="@Properties.alYellow" title="@Strings.SettingAlYellowTitle">
+            <settingConfig type="boolean" />
+        </setting>
+        <setting propertyKey="@Properties.alGreen" title="@Strings.SettingAlGreenTitle">
+            <settingConfig type="boolean" />
         </setting>
         <setting propertyKey="@Properties.proxyUrl" title="@Strings.SettingProxyTitle">
             <settingConfig type="alphaNumeric" />

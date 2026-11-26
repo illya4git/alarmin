@@ -1,12 +1,13 @@
 import Toybox.Lang;
 import Toybox.WatchUi;
 
-// Main menu (target UI page 3, plan §3.5): region and about. Settings join it later.
+// Main menu (target UI page 3, plan §3.5): region, alerts, about.
 // Reached with DOWN from the map; UP from the first item goes back to the map.
 class MainMenu extends WatchUi.Menu2 {
     function initialize() {
         Menu2.initialize({:title => "Alarmin"});
         addItem(new WatchUi.MenuItem("Region", Regions.nameOf(Settings.regionId()), :region, null));
+        addItem(new WatchUi.MenuItem("Alerts", "Prompt on change", :alerts, null));
         addItem(new WatchUi.MenuItem("About", null, :about, null));
     }
 
@@ -37,6 +38,8 @@ class MainMenuDelegate extends WatchUi.Menu2InputDelegate {
         var id = item.getId();
         if (id == :region) {
             WatchUi.pushView(new RegionPicker(), new RegionPickerDelegate(), WatchUi.SLIDE_LEFT);
+        } else if (id == :alerts) {
+            WatchUi.pushView(new AlertsMenu(), new AlertsMenuDelegate(), WatchUi.SLIDE_LEFT);
         } else if (id == :about) {
             WatchUi.pushView(new AboutView(), new WatchUi.BehaviorDelegate(), WatchUi.SLIDE_LEFT);
         }

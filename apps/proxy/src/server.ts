@@ -5,6 +5,8 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import type { StatusSource } from './sources.ts';
 
 export const API_VERSION = 1;
+/** `/v1/all` digit for a region the serving source doesn't cover. */
+export const UNKNOWN_DIGIT = 3;
 /** Oldest watch app version this proxy supports (reported in /v1/meta). */
 export const MIN_WATCH_VERSION = '0.1.0';
 
@@ -37,6 +39,8 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   app.addHook('onSend', async (_req, reply) => {
     reply.header('cache-control', 'no-store');
   });
+
+  const sourceCode = () => (opts.status.source === 'tryvoha' ? Source.Tryvoha : Source.Siren);
 
   /** Data freshness shared by all watch responses. */
   const freshness = () => {
@@ -108,15 +112,19 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
           t: state.since,
           a: fresh.a,
           x: state.unknown ? 1 : fresh.x,
-          s: opts.status.source === 'tryvoha' ? Source.Tryvoha : Source.Siren,
+          s: sourceCode(),
         };
       });
 
       v1.get('/all', async (_req, reply) => {
         const snapshot = opts.status.snapshot;
         if (!snapshot) return reply.code(503).send({ e: 'warming' });
-        const m = REGIONS.map((r) => snapshot.regions.get(r.id)?.level ?? 0).join('');
-        return { m, t: Math.floor(snapshot.computedAt / 1000), ...freshness() };
+        // One digit per region in map order; 3 = not covered by the serving source (never shown as green).
+        const m = REGIONS.map((r) => {
+          const st = snapshot.regions.get(r.id);
+          return !st || st.unknown ? UNKNOWN_DIGIT : st.level;
+        }).join('');
+        return { m, t: Math.floor(snapshot.computedAt / 1000), ...freshness(), s: sourceCode() };
       });
     },
     { prefix: '/v1' },

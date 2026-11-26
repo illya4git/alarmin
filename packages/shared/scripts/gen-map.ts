@@ -6,17 +6,19 @@
  * Source: Natural Earth 1:10m "Admin 1 – States, Provinces" v5.1.2 (public domain), downloaded once
  * into packages/shared/.cache/ (git-ignored, ~40 MB). Regions are matched by ISO 3166-2 code.
  *
- * Output: apps/watch/resources/generated/map.json + map.xml (a jsonData resource, loaded only
- * while the map page is shown). Format, all coordinates in screen pixels:
- *   { "w": screen size, "p": [[idx, n, packed...], ...], "d": [[idx, x, y], ...] }
- * - `p`: one entry per polygon (outer ring only). `idx` is the region's map index (the digit
- *   position in /v1/all), `n` the point count (≤ 64, the Dc.fillPolygon limit), then the points
- *   packed two per Number: x1<<24 | y1<<16 | x2<<8 | y2 (written as signed 32-bit).
- * - `d`: cities too small to fill at this scale, drawn as dots.
+ * Output, in apps/watch/:
+ * - resources/generated/map.fnt + map.png: a bitmap font (BMFont text format). Glyph 'A'+k is
+ *   region k's fill, 'a'+k its 1-px outline. A glyph is drawn in the current colour, so the watch
+ *   paints any region in any colour with one drawText call and no per-point work (drawing 1,254
+ *   points with fillPolygon/drawLine took seconds on the FR55).
+ * - source/generated/MapData.mc: which region each glyph is, where it goes, and the city dots.
+ * Shapes are simplified on the 208-px grid (<= 60 points each, the detail of the first
+ * fillPolygon map), then rasterized here: fill by scanline at pixel centres, outline by Bresenham.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
 import { REGIONS } from '../src/regions.ts';
 
 const SOURCE_URL =
@@ -27,7 +29,7 @@ const SCREEN = 208;
 /** Points must stay inside this circle, and above the footer line. */
 const MAX_RADIUS = SCREEN / 2 - 4;
 const MAX_Y = 168;
-const MAX_POINTS = 60; // fillPolygon allows 64; keep a margin
+const MAX_POINTS = 60; // detail level of the first map (fillPolygon's 64-point limit)
 const MIN_AREA_PX = 6; // drop islands smaller than this
 
 /** ISO 3166-2 → Siren region id. Sevastopol is drawn as part of Crimea (no source covers it). */
@@ -72,6 +74,7 @@ type Pt = [number, number];
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const cacheFile = resolve(root, 'packages/shared/.cache/ne_10m_admin_1_v5.1.2.geojson');
 const outDir = resolve(root, 'apps/watch/resources/generated');
+const mcFile = resolve(root, 'apps/watch/source/generated/MapData.mc');
 
 if (!existsSync(cacheFile)) {
   console.log(`downloading ${SOURCE_URL}`);
@@ -197,7 +200,9 @@ function area(ring: Pt[]): number {
 }
 
 const idxOf = new Map<number, number>(REGIONS.map((r) => [r.id, r.idx]));
-const polygons: number[][] = [];
+
+/** Simplified screen-space rings per region map index. */
+const shapes = new Map<number, Pt[][]>();
 let totalPoints = 0;
 let dropped = 0;
 for (const { id, ring } of rings) {
@@ -212,13 +217,8 @@ for (const { id, ring } of rings) {
     dropped++;
     continue;
   }
-  const packed: number[] = [];
-  for (let i = 0; i < pts.length; i += 2) {
-    const [x1, y1] = pts[i] as Pt;
-    const [x2, y2] = pts[i + 1] ?? (pts[i] as Pt);
-    packed.push((x1 << 24) | (y1 << 16) | (x2 << 8) | y2 | 0);
-  }
-  polygons.push([idxOf.get(id) as number, pts.length, ...packed]);
+  const idx = idxOf.get(id) as number;
+  shapes.set(idx, [...(shapes.get(idx) ?? []), pts]);
   totalPoints += pts.length;
 }
 
@@ -227,22 +227,197 @@ const dots = Object.entries(DOTS).map(([id, ll]) => {
   return [idxOf.get(Number(id)) as number, Math.round(x), Math.round(y)];
 });
 
-const covered = new Set([...polygons.map((p) => p[0]), ...dots.map((d) => d[0])]);
+const covered = new Set([...shapes.keys(), ...dots.map((d) => d[0])]);
 const uncovered = REGIONS.filter((r) => !covered.has(r.idx));
 if (uncovered.length) throw new Error(`regions without geometry: ${uncovered.map((r) => r.nameLatin).join(', ')}`);
+if (shapes.size > 26) throw new Error(`${shapes.size} shapes; glyphs A-Z / a-z hold 26`);
 
-const json = JSON.stringify({ w: SCREEN, p: polygons, d: dots });
+// ---------------------------------------------------------------- rasterize
+type PixelSet = Set<number>; // y * SCREEN + x
+const key = (x: number, y: number) => y * SCREEN + x;
+
+/** Bresenham outline of every ring, the pixels drawLine would set. */
+function outline(rs: Pt[][]): PixelSet {
+  const px: PixelSet = new Set();
+  for (const r of rs) {
+    for (let i = 0; i < r.length; i++) {
+      let [x0, y0] = r[i] as Pt;
+      const [x1, y1] = r[(i + 1) % r.length] as Pt;
+      const dx = Math.abs(x1 - x0);
+      const dy = -Math.abs(y1 - y0);
+      const sx = x0 < x1 ? 1 : -1;
+      const sy = y0 < y1 ? 1 : -1;
+      let err = dx + dy;
+      for (;;) {
+        px.add(key(x0, y0));
+        if (x0 === x1 && y0 === y1) break;
+        const e2 = 2 * err;
+        if (e2 >= dy) {
+          err += dy;
+          x0 += sx;
+        }
+        if (e2 <= dx) {
+          err += dx;
+          y0 += sy;
+        }
+      }
+    }
+  }
+  return px;
+}
+
+/** Scanline fill at pixel centres (even-odd), plus the outline so edges are covered. */
+function fill(rs: Pt[][], edge: PixelSet): PixelSet {
+  const px: PixelSet = new Set(edge);
+  for (const r of rs) {
+    const ys = r.map((p) => p[1]);
+    for (let y = Math.min(...ys); y <= Math.max(...ys); y++) {
+      const xs: number[] = [];
+      for (let i = 0; i < r.length; i++) {
+        const [ax, ay] = r[i] as Pt;
+        const [bx, by] = r[(i + 1) % r.length] as Pt;
+        if ((ay <= y && y < by) || (by <= y && y < ay)) xs.push(ax + ((y - ay) * (bx - ax)) / (by - ay));
+      }
+      xs.sort((p, q) => p - q);
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        for (let x = Math.ceil(xs[i] as number); x <= Math.floor(xs[i + 1] as number); x++) px.add(key(x, y));
+      }
+    }
+  }
+  return px;
+}
+
+interface Glyph {
+  idx: number;
+  /** Screen position of the glyph's top-left. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fill: PixelSet;
+  edge: PixelSet;
+}
+const glyphs: Glyph[] = [...shapes.entries()]
+  .sort((p, q) => p[0] - q[0])
+  .map(([idx, rs]) => {
+    const edge = outline(rs);
+    const f = fill(rs, edge);
+    const xs = [...f].map((k) => k % SCREEN);
+    const ys = [...f].map((k) => Math.floor(k / SCREEN));
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { idx, x, y, w: Math.max(...xs) - x + 1, h: Math.max(...ys) - y + 1, fill: f, edge };
+  });
+
+// ---------------------------------------------------------------- atlas, PNG, BMFont
+const ATLAS_W = 256;
+const PAD = 1;
+const items = glyphs.flatMap((g, k) => [
+  { ch: 65 + k, g, px: g.fill },
+  { ch: 97 + k, g, px: g.edge },
+]);
+const placed: ((typeof items)[number] & { ax: number; ay: number })[] = [];
+let ax = 0;
+let ay = 0;
+let rowH = 0;
+for (const it of [...items].sort((p, q) => q.g.h - p.g.h)) {
+  if (ax + it.g.w > ATLAS_W) {
+    ax = 0;
+    ay += rowH + PAD;
+    rowH = 0;
+  }
+  placed.push({ ...it, ax, ay });
+  ax += it.g.w + PAD;
+  rowH = Math.max(rowH, it.g.h);
+}
+const ATLAS_H = ay + rowH;
+
+const rgba = Buffer.alloc(ATLAS_W * ATLAS_H * 4); // transparent black
+for (const p of placed) {
+  for (const k of p.px) {
+    const o = ((p.ay + Math.floor(k / SCREEN) - p.g.y) * ATLAS_W + (p.ax + (k % SCREEN) - p.g.x)) * 4;
+    rgba.writeUInt32BE(0xffffffff, o); // white, opaque
+  }
+}
+
+const CRC = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(b: Buffer): number {
+  let c = 0xffffffff;
+  for (const v of b) c = (CRC[(c ^ v) & 0xff] as number) ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function chunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(td));
+  return Buffer.concat([len, td, crc]);
+}
+const ihdr = Buffer.alloc(13);
+ihdr.writeUInt32BE(ATLAS_W, 0);
+ihdr.writeUInt32BE(ATLAS_H, 4);
+ihdr.set([8, 6, 0, 0, 0], 8); // 8-bit RGBA
+const raw = Buffer.alloc((ATLAS_W * 4 + 1) * ATLAS_H); // filter byte 0 per row
+for (let y = 0; y < ATLAS_H; y++) rgba.copy(raw, y * (ATLAS_W * 4 + 1) + 1, y * ATLAS_W * 4, (y + 1) * ATLAS_W * 4);
+const png = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  chunk('IHDR', ihdr),
+  chunk('IDAT', deflateSync(raw)),
+  chunk('IEND', Buffer.alloc(0)),
+]);
+
+const lineH = Math.max(...glyphs.map((g) => g.h));
+const fnt = [
+  `info face="AlarminMap" size=${lineH} bold=0 italic=0 charset="" unicode=1 stretchH=100 smooth=0 aa=1 padding=0,0,0,0 spacing=${PAD},${PAD} outline=0`,
+  `common lineHeight=${lineH} base=${lineH} scaleW=${ATLAS_W} scaleH=${ATLAS_H} pages=1 packed=0 alphaChnl=0 redChnl=0 greenChnl=0 blueChnl=0`,
+  'page id=0 file="map.png"',
+  `chars count=${placed.length}`,
+  ...[...placed]
+    .sort((p, q) => p.ch - q.ch)
+    .map(
+      (p) =>
+        `char id=${p.ch} x=${p.ax} y=${p.ay} width=${p.g.w} height=${p.g.h} xoffset=0 yoffset=0 xadvance=${p.g.w} page=0 chnl=15`,
+    ),
+  '',
+].join('\n');
+
+const mc = `// GENERATED by packages/shared/scripts/gen-map.ts. Do not edit; run \`pnpm --filter @alarmin/shared gen-map\`.
+import Toybox.Lang;
+
+// Minimap glyphs (font Rez.Fonts.Map): glyph k is char 'A'+k (fill) and 'a'+k (outline),
+// drawn with its top-left at (X[k], Y[k]).
+module MapData {
+    const COUNT = ${glyphs.length};
+    // Region map index (digit position in /v1/all) per glyph.
+    const IDX = [${glyphs.map((g) => g.idx).join(', ')}] as Array<Number>;
+    const X = [${glyphs.map((g) => g.x).join(', ')}] as Array<Number>;
+    const Y = [${glyphs.map((g) => g.y).join(', ')}] as Array<Number>;
+    // Cities too small to fill, drawn as dots: [region idx, x, y].
+    const DOTS = [${dots.map((d) => `[${d.join(', ')}]`).join(', ')}] as Array<Array<Number>>;
+}
+`;
+
 mkdirSync(outDir, { recursive: true });
-writeFileSync(resolve(outDir, 'map.json'), json);
+writeFileSync(resolve(outDir, 'map.png'), png);
+writeFileSync(resolve(outDir, 'map.fnt'), fnt);
 writeFileSync(
   resolve(outDir, 'map.xml'),
   `<!-- GENERATED by packages/shared/scripts/gen-map.ts. Do not edit; run the gen-map script of packages/shared. -->
 <resources>
-    <jsonData id="Map" filename="map.json"/>
+    <fonts>
+        <font id="Map" filename="map.fnt" antialias="false"/>
+    </fonts>
 </resources>
 `,
 );
+mkdirSync(dirname(mcFile), { recursive: true });
+writeFileSync(mcFile, mc);
 console.log(
-  `map: scale ${scale.toFixed(2)} px/unit, centre y ${cy}, ${polygons.length} polygons (${dropped} islands dropped), ` +
-    `${totalPoints} points, ${json.length} bytes JSON`,
+  `map: scale ${scale.toFixed(2)} px/unit, centre y ${cy}, ${glyphs.length} regions (${dropped} islands dropped), ` +
+    `${totalPoints} points, atlas ${ATLAS_W}x${ATLAS_H} (${png.length} bytes PNG)`,
 );
