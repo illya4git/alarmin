@@ -58,6 +58,6 @@ class BackgroundService extends System.ServiceDelegate {
         } else if (level == Levels.YELLOW) {
             head = (flags & Levels.FLAG_OWN_YELLOW) != 0 ? "THREAT" : "PARTIAL";
         }
-        return head + ": " + Regions.nameOf(_regionId);
+        return head + ": " + Settings.regionName();
     }
 }

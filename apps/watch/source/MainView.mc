@@ -1,6 +1,7 @@
 import Toybox.Attention;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.Math;
 import Toybox.Timer;
 import Toybox.WatchUi;
 
@@ -16,6 +17,8 @@ class MainView extends WatchUi.View {
     }
 
     function onShow() as Void {
+        // A raion picked on the phone gets its name cached (or an unknown ID reset) before use.
+        Raions.ensureCached();
         vibrateForWake(Status.takePendingWake());
         _request.fetch();
         var timer = new Timer.Timer();
@@ -65,9 +68,10 @@ class MainView extends WatchUi.View {
         dc.clear();
         dc.setColor(fg, Graphics.COLOR_TRANSPARENT);
 
-        // Region name
-        dc.drawText(cx, h * 14 / 100, Graphics.FONT_SMALL, Regions.nameOf(Settings.regionId()),
-            Graphics.TEXT_JUSTIFY_CENTER);
+        // Region name, in a smaller font when a long raion name wouldn't fit the round top.
+        var name = Settings.regionName();
+        var nameY = h * 14 / 100;
+        dc.drawText(cx, nameY, fitFont(dc, name, nameY), name, Graphics.TEXT_JUSTIFY_CENTER);
 
         // Headline
         dc.drawText(cx, h * 37 / 100, Graphics.FONT_LARGE, Ui.headline(level, flags),
@@ -105,6 +109,20 @@ class MainView extends WatchUi.View {
         // Tryvoha's terms require credit wherever its data is shown.
         return "Updated " + Ui.age(age) + (st["s"] == Levels.SOURCE_TRYVOHA ? "
 via Tryvoha" : "");
+    }
+
+    // Largest of SMALL / TINY / XTINY whose width fits the screen's chord at row top `y`.
+    private function fitFont(dc as Graphics.Dc, text as String, y as Number) as Graphics.FontType {
+        var fonts = [Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY] as Array<Graphics.FontType>;
+        var r = dc.getWidth() / 2;
+        var dy = r - y;
+        var chord = 2 * Math.sqrt(r * r - dy * dy) - 8;
+        for (var i = 0; i < fonts.size() - 1; i++) {
+            if (dc.getTextWidthInPixels(text, fonts[i]) <= chord) {
+                return fonts[i];
+            }
+        }
+        return Graphics.FONT_XTINY;
     }
 }
 

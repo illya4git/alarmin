@@ -100,7 +100,7 @@ class MapView extends WatchUi.View {
         }
 
         if (font != null) {
-            var selected = Regions.indexOf(Settings.regionId());
+            var selected = Regions.indexOf(Settings.oblastId());
             var just = Graphics.TEXT_JUSTIFY_LEFT;
             var sel = -1;
             for (var k = 0; k < MapData.COUNT; k++) {

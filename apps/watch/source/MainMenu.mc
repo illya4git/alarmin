@@ -6,7 +6,7 @@ import Toybox.WatchUi;
 class MainMenu extends WatchUi.Menu2 {
     function initialize() {
         Menu2.initialize({:title => "Alarmin"});
-        addItem(new WatchUi.MenuItem("Region", Regions.nameOf(Settings.regionId()), :region, null));
+        addItem(new WatchUi.MenuItem("Region", Settings.regionName(), :region, null));
         addItem(new WatchUi.MenuItem("Alerts", "Prompt on change", :alerts, null));
         addItem(new WatchUi.MenuItem("About", null, :about, null));
     }
@@ -16,7 +16,7 @@ class MainMenu extends WatchUi.Menu2 {
         Menu2.onShow();
         var item = getItem(findItemById(:region));
         if (item != null) {
-            item.setSubLabel(Regions.nameOf(Settings.regionId()));
+            item.setSubLabel(Settings.regionName());
         }
     }
 }

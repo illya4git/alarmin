@@ -41,12 +41,22 @@ class StatusGlance extends WatchUi.GlanceView {
         // Rows: region name, short level word, and "since HH:MM" if it fits (FR55 glance: 144x75).
         var font = Graphics.FONT_GLANCE;
         var rowH = dc.getFontHeight(font);
-        var rows = [Regions.nameOf(Settings.regionId()), Ui.shortLevel(level)] as Array<String>;
+        var rows = [Settings.regionName(), Ui.shortLevel(level)] as Array<String>;
         if (level != Status.UNKNOWN && st["t"] != null && rowH * 3 <= h) {
             var since = Ui.since(st["t"] as Number);
             if (since.length() > 0) {
                 rows.add(since);
             }
+        }
+
+        // Long raion names: cut to fit with a trailing dot (Bilhorod-Dnistrovskyi → Bilhorod-Dnis.).
+        var avail = dc.getWidth() - barW - 8;
+        var name = rows[0];
+        if (dc.getTextWidthInPixels(name, font) > avail) {
+            while (name.length() > 4 && dc.getTextWidthInPixels(name + ".", font) > avail) {
+                name = name.substring(0, name.length() - 1) as String;
+            }
+            rows[0] = name + ".";
         }
 
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
