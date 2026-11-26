@@ -20,14 +20,17 @@ COPY packages/shared/package.json packages/shared/
 COPY apps/proxy/package.json apps/proxy/
 # The store stays in this stage; only node_modules is copied to the runtime image.
 RUN pnpm install --frozen-lockfile --prod --filter "@alarmin/proxy..." --store-dir /tmp/pnpm-store
+COPY packages/shared/src packages/shared/src
+COPY apps/proxy/src apps/proxy/src
+# COPY keeps the checkout's file modes; a clone made with a strict umask (e.g. 077)
+# would leave files unreadable to the runtime user. Make everything world-readable.
+RUN chmod -R a+rX,go-w /app
 
 # --- runtime -----------------------------------------------------------------
 # No package manager, no build tools.
 FROM node:26-alpine
 WORKDIR /app
 COPY --from=deps /app ./
-COPY packages/shared/src packages/shared/src
-COPY apps/proxy/src apps/proxy/src
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \

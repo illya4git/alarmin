@@ -27,3 +27,6 @@ spikes/*/data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Server-only compose additions (e.g. joining a reverse proxy network)
+docker-compose.override.yml
