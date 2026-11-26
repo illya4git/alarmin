@@ -1,0 +1,5 @@
+<resources>
+    <string id="AppName">Cyrillic Test</string>
+    <!-- Same text as a source literal on the pages, to check the resource compiler path too. -->
+    <string id="Sample">Київська: тривога</string>
+</resources>

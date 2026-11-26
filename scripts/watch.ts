@@ -4,6 +4,7 @@
  *   node scripts/watch.ts secrets            # write apps/watch/source/generated/Secrets.mc from .env
  *   node scripts/watch.ts build [device]     # secrets + monkeyc → apps/watch/bin/alarmin-<device>.prg
  *   node scripts/watch.ts sim [device]       # build, start the simulator if needed, load the app
+ *   node scripts/watch.ts sim fr55 spikes/x  # same for another Connect IQ project (no secrets; bin/x-<device>.prg)
  *
  * .env keys used: APP_KEYS (first key goes into the watch), WATCH_PROXY_URL (default http://127.0.0.1:8080;
  * a WATCH_PROXY_URL environment variable overrides it),
@@ -12,12 +13,14 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const watchDir = join(root, 'apps/watch');
-const [command = 'build', device = 'fr55'] = process.argv.slice(2);
+const [command = 'build', device = 'fr55', project] = process.argv.slice(2);
+const projectDir = project ? resolve(root, project) : watchDir;
+const appName = project ? basename(projectDir) : 'alarmin';
 
 function readEnv(): Record<string, string> {
   const file = join(root, '.env');
@@ -75,12 +78,12 @@ module Secrets {
 }
 
 function build(env: Record<string, string>): string {
-  writeSecrets(env);
+  if (!project) writeSecrets(env);
   const key = env.WATCH_DEVELOPER_KEY;
   if (!key || !existsSync(key)) throw new Error('Set WATCH_DEVELOPER_KEY in .env to your Connect IQ developer key');
-  const out = join(watchDir, `bin/alarmin-${device}.prg`);
+  const out = join(projectDir, `bin/${appName}-${device}.prg`);
   mkdirSync(dirname(out), { recursive: true });
-  const args = ['-d', device, '-f', join(watchDir, 'monkey.jungle'), '-o', out, '-y', key, '-w', '-l', '2'];
+  const args = ['-d', device, '-f', join(projectDir, 'monkey.jungle'), '-o', out, '-y', key, '-w', '-l', '2'];
   const status = sdkJava('com.garmin.monkeybrains.Monkeybrains', args);
   if (status !== 0) process.exit(status);
   return out;

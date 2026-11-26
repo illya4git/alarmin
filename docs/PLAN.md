@@ -22,7 +22,7 @@ Ukrainian air-raid alert widget for Garmin watches (Forerunner 55 first), backed
 
 | #   | Topic                           | Default                                                                                                                                                                                              | Why                                                                                                                                                                                      |
 | --- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D8  | Region names on the watch       | **Latin transliteration** (`Kyivska`, `Kyiv city`, `Lvivska`…)                                                                                                                                       | The FR55's language list (from the SDK `compiler.json`) has no Ukrainian, so the system fonts very likely lack Cyrillic. A custom Cyrillic bitmap font is a later option (costs memory). |
+| D8  | Region names on the watch       | **Latin transliteration** (`Kyivska`, `Kyiv city`, `Lvivska`…)                                                                                                                                       | The FR55's language list (from the SDK `compiler.json`) has no Ukrainian, so the system fonts very likely lack Cyrillic. A custom Cyrillic bitmap font is a later option (costs memory). **2026-11-26 spike (`spikes/cyrillic/`):** the simulator renders Ukrainian, including Є Ї І Ґ, with the FR55's own fonts (the worldwide set also serves Russian). Revisit once the device confirms (§8). |
 | D9  | Alert types that set the colour | **AIR** only. `ARTILLERY` and `URBAN_FIGHTS` show as a small secondary marker.                                                                                                                       | Matches "air raid" in the brief. Other types affect few oblasts and would otherwise keep them red permanently.                                                                           |
 | D10 | Timestamps                      | The proxy sends Unix epoch seconds. The watch formats local time.                                                                                                                                    | Smallest payload, no timezone logic on the watch.                                                                                                                                        |
 | D11 | Proxy stack                     | Node 26 LTS (via fnm, `.node-version`), TypeScript 7, **Fastify**, **zod** (upstream validation), **pino**, `node:test`, **Biome** (lint + format)                                                   | Small, fast, well typed. Fastify's built-in schema serialization keeps payloads tiny.                                                                                                    |
@@ -177,12 +177,17 @@ The full widget has three pages. The glance stays as it is (§3.2).
 | #   | Page                | Content                                                                                                                                                                                                                                                                                                                                                                                                      | Network                                  | Memory                                                                                                     |
 | --- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | 1   | **Status** (as now) | Region colour fills the screen; region name, headline (`AIR ALERT` / `THREAT` / `PARTIAL` / `CLEAR` / `NO DATA`), "since", shelling marker. Footer: freshness or error; a second line `via Tryvoha` while the proxy serves Tryvoha.                                                                                                                                                                          | `/v1/s/:id` every **10 s** while visible | Small: nothing beyond `Status` is loaded                                                                   |
-| 2   | **Minimap**         | Whole of Ukraine on a black background, each oblast filled red / yellow / green from `/v1/all` with black borders. The selected region gets a thick white outline; the three cities are dots (a white ring when selected). Unknown or stale regions are drawn as white outlines only (`3`, e.g. Crimea in fallback). One footer line: `6 red  6 yellow`, `All clear`, or the error. | `/v1/all` every **15 s** while visible   | Map font (7 KB PNG atlas) loaded on show, released on hide. Measured with the earlier shape data: 28 KB in use, 34 KB peak of 60 KB |
+| 2   | **Minimap**         | Whole of Ukraine on a black background, each oblast filled red / yellow / green from `/v1/all` with black borders. The selected region gets a thick white outline; the three cities are dots (a white ring when selected). Unknown or stale regions are drawn as white outlines only (`3`, e.g. Crimea in fallback). One footer line: `6 red  6 yellow`, `All clear`, or the error. | `/v1/all` every **15 s** while visible   | Map font (7 KB PNG atlas) loaded on show, released on hide. Measured: 32 KB in use, 35 KB peak of 60 KB |
 | 3   | **Menu**            | Native `Menu2`: **Region** (sublabel = current; opens the picker), **Alerts** (toggles: prompt on red / yellow / all clear → `alRed`, `alYellow`, `alGreen`), **About** (disclaimer, data credits, source now in use).                                                                                                                                                                                       | none                                     | `Menu2` only                                                                                               |
 
 **Navigation (FR55: no touch, 5 buttons).** DOWN / UP step through the pages: status → map → menu, and inside the menu DOWN / UP move through its items. UP from the first menu item (or BACK) returns to the map; the menu doesn't wrap. START is kept free on the status and map pages for a later page-specific action. BACK on the status or map page leaves the widget. Built with our own delegates (`switchToView` between status and map, `pushView` for the menu, `Menu2InputDelegate.onWrap` for UP at the top), not `ViewLoop`, so the menu can be the third step. Page dots can be drawn by hand later if they're missed.
 
 **Done so far (2026-11-26):** the three-page navigation, the minimap (drawn from font glyphs since the FR55 took ~3 s per draw with polygons), page 3 with Region, Alerts and About, and digit `3` for unknown regions in `/v1/all`.
+
+**Planned (Phase 8):**
+
+- **Mixed oblasts striped:** on the country map, an oblast whose raions differ in colour is striped in the colours present, so any mix shows: red + green, yellow + green, all three. Each oblast gets two extra glyphs, its fill masked to every third diagonal stripe at two offsets. Draw the fill in the first colour present, then stripe glyph 1 in the second and stripe glyph 2 in the third (if any). A single-colour oblast is drawn as now. Cost: at most 2 extra `drawText` per mixed oblast (≤ ~105 calls in total), about +4 KB while the map page is open, no extra request. Stripes show which colours are present, not where; zoom shows where. `/v1/all` changes each oblast's digit to a colour set (bit 0 green, bit 1 yellow, bit 2 red; `1`–`7`), with `0` = unknown. That breaks the current encoding, so it goes in as `/v2/all` and `/v1/all` stays until the watch has moved. Needs raion states from the proxy but no raion boundaries, so it can ship before zoom.
+- **Zoom (START on the map):** the map shows only your oblast, filled to the screen, with its raions coloured individually and your raion outlined. START or BACK returns to the country view. Raion shapes come from a per-oblast font resource, loaded only while zoomed. Colours come from a new `/v1/o/:oblastId`, one digit per raion in table order. Oblasts without raion data (Kyiv city, Crimea in fallback) show the oblast alone. The zoomed view polls like the country view. **Rule: zoom must cost nothing when it isn't used.** Raion shapes, positions and names live in resources loaded on zoom (not code constants, which sit in memory whenever the widget runs); the raion request is sent only while zoomed. What remains is the zoom view's code (~1 KB of the 64 KB widget memory); the glance and background are untouched. If the zoom spike shows a noticeable load delay, or any overhead on the other pages, drop zoom.
 
 ---
 
@@ -235,9 +240,9 @@ alarmin/
 - [x] Wake prompt on a real FR55: works, native dialog, one vibration (§7). Spike: `spikes/wake-prompt/`.
 - [x] Can the background read `Storage`? Yes, and write it too on CIQ ≥ 3.2 (FR55 is 3.4; SDK docs). The background service updates `Storage` directly; `Background.exit` only signals a redraw.
 - [ ] Glance refresh: on a real FR55, does a `makeWebRequest` sent from glance `onStart` deliver its callback before the glance app is shut down? How often does the system re-render a visible glance? Can the glance pull the next background run forward (`registerForTemporalEvent(Moment)`)?
-- [ ] Confirm Cyrillic can't render on the FR55 (D8). Test a `Ї`/`Є` string in the simulator.
+- [ ] Cyrillic on the FR55 (D8), spike `spikes/cyrillic/`: renders in the simulator (2026-11-26), device check pending.
 - [x] Confirm `makeWebRequest` custom header + HTTPS through Garmin Connect Mobile on a real phone (ngrok 2026-11-25, own domain 2026-11-26).
-- [ ] Send the ukrainealarm.com API key application. Message the Siren maintainer about acceptable polling rates.
+- Deferred to Phase 9 (2026-11-26): the ukrainealarm.com key application and the message to the Siren maintainer.
 
 **Phase 1: Monorepo scaffold**
 
@@ -282,20 +287,31 @@ alarmin/
 **Phase 7: Pages and map (target UI, §3.5)**
 
 - [x] Page navigation status → map → menu with DOWN / UP; menu with Region and About.
-- [ ] Try the navigation on the FR55 (does the system pass UP / DOWN to the widget, or use them to leave it?).
+- [x] Navigation on the FR55: UP / DOWN reach the widget and move between pages as in the simulator.
 - [x] Alerts submenu: toggles for `alRed`, `alYellow`, `alGreen` (also in the phone settings).
 - [x] `/v1/all`: digit `3` for regions the serving source doesn't cover, plus `s`.
 - [x] Map shapes: `pnpm --filter @alarmin/shared gen-map` projects Natural Earth 1:10m admin-1 (v5.1.2, public domain), fits it to the round screen, simplifies each shape to ≤ 60 points and rasterizes every oblast into a bitmap-font glyph (`A`+k fill, `a`+k outline; 25 glyph pairs, 256×246 atlas, 7 KB PNG) plus `MapData.mc` with glyph positions and city dots.
 - [x] Map page fills each oblast from `/v1/all`, highlights the selected one, polls every 15 s while visible. Simulator: 28.1 / 59.9 KB used, 34.4 KB peak (polygon version).
-- [ ] Glyph map on the FR55: time to first draw and memory.
+- [x] Glyph map on the FR55: appears almost instantly. Simulator: 31.9 / 59.9 KB used, 34.6 KB peak, no allocations per `onUpdate`.
 
-**Phase 8: Later**
+**Phase 8: Raions and map detail**
 
-- [ ] Raion selection (two-step picker, generated raion table).
-- [ ] More alarm options (quiet hours, per-transition rules).
+- [ ] Raion table: generated into `packages/shared` from Siren `/api/v3/regions` (post-2020 raions, ~136), Tryvoha slugs matched by name and checked by `verify-upstream`.
+- [ ] Proxy: raion states. Red = raion Red AIR, or all its hromadas red; yellow = raion yellow, or any hromada in it under alert. `/v1/s/:id` accepts raion IDs; `/v1/o/:oblastId` returns one digit per raion.
+- [ ] Watch: two-step picker (oblast → Whole oblast / raion); the phone settings list too. Glance and background store only the ID; the raion names stay out of their 32 KB.
+- [ ] Map: mixed oblasts striped in the colours present (two stripe glyphs per oblast, `/v2/all` colour sets, §3.5). Can ship before the boundaries work.
+- [ ] Raion boundaries: find a source with post-2020 raions and a usable licence. Natural Earth has no Ukrainian admin-2; candidates are OCHA COD-AB (ADM2) and geoBoundaries. Match the shapes to Siren raion IDs.
+- [ ] Zoom spike: one oblast (Kharkivska, 7 raions) as a font resource. Measure load time, memory and draw time on the FR55 before generating all 24. Go / no-go: no noticeable delay on START, no overhead on the other pages.
+- [ ] Zoom on START (§3.5), with your raion highlighted.
+
+**Phase 9: Later**
+
 - [ ] Cyrillic custom font (if memory allows).
 - [ ] More devices (`manifest.xml` products, layout per resolution).
 - [ ] Store readiness: per-device tokens, privacy note, official ukrainealarm key, ToS review of all sources.
+- [ ] Send the ukrainealarm.com API key application; message the Siren maintainer about acceptable polling rates (deferred 2026-11-26).
+- [ ] Alarm refinements from the week of use: quiet hours, per-transition rules.
+- [ ] START on the status page (e.g. force a refresh).
 
 ---
 
@@ -333,10 +349,12 @@ alarmin/
 | 2026-11-26 | Deployed behind Caddy + Cloudflare. Cloudflare's Bot Fight Mode and Browser Integrity Check are off for the proxy host (the phone's requests aren't browser-like); a server without buildx needed the Dockerfile to work with the classic builder.                                                              | Deployment notes stay outside the repo (D12); Dockerfile kept classic-builder compatible.                                                                                                                                                                                                                                                  |
 | 2026-11-26 | Tryvoha fallback: on the 20:25 UTC recordings of 24 Nov, Tryvoha and Siren give the same colour for all 27 regions Tryvoha covers (now a unit test). Live: Siren on a dead port → fallback after 3 failures (~15 s), Crimea served as `x=1`, `/v1/meta` `src=tryvoha`.                                          | Phase 5 proxy side done.                                                                                                                                                                                                                                                                                                                   |
 | 2026-11-26 | Minimap in the simulator: Natural Earth 1:10m simplified to ≤ 60 points per oblast reads well at 208 px; concave shapes fill cleanly with `fillPolygon`. Memory on the map page 28.1 KB of 59.9 KB, peak 34.4 KB; no new allocations per `onUpdate` beyond the transient point arrays.                          | Map stays a generated jsonData resource loaded per visit; no need to pack further.                                                                                                                                                                                                                                                         |
-| 2026-11-26 | Polygon minimap on the FR55: ~3 s before the page appears and ~3 s again when data arrives. Decoding and drawing 1,254 points (`fillPolygon` + `drawLine`) per draw is too slow on the device, though instant in the simulator. | Shapes pre-rasterized at build time into a bitmap font; each oblast is one `drawText` tinted by `setColor` (~55 calls per draw). Looks identical in the simulator; device timing to confirm. |
+| 2026-11-26 | Polygon minimap on the FR55: ~3 s before the page appears and ~3 s again when data arrives. Decoding and drawing 1,254 points (`fillPolygon` + `drawLine`) per draw is too slow on the device, though instant in the simulator. | Shapes pre-rasterized at build time into a bitmap font; each oblast is one `drawText` tinted by `setColor` (~55 calls per draw). Looks identical; on the FR55 the map now appears almost instantly. Memory 31.9 KB in use (+3.8 KB for the font), peak 34.6 KB (unchanged). |
+| 2026-11-26 | Cyrillic spike in the simulator: the FR55's worldwide font set (Roboto, also used for Russian) draws Ukrainian text, including Є є Ї ї І і Ґ ґ and both apostrophes, from source literals and from `strings.xml`. | D8's premise (no Cyrillic) is likely wrong. Confirm on the device; then decide between Ukrainian and Latin names (§8). |
 
 ## 8. Open items
 
 - Whether to keep a third fallback (Ubilling, oblast on/off only) in Phase 5.
 - App display name and icon.
+- Region names in Ukrainian instead of Latin (D8), if the FR55 confirms the Cyrillic spike. Check memory in the glance and background and the fit of long names (`Дніпропетровська`).
 - Licence for the repo (MIT suggested).
