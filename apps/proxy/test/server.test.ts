@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { Flag, Level, REGIONS } from '@alarmin/shared';
+import { Flag, Level, RAIONS, RAIONS_BY_OBLAST, REGIONS } from '@alarmin/shared';
 import type { FastifyInstance } from 'fastify';
 import type { RegionState } from '../src/normalize.ts';
 import { buildServer } from '../src/server.ts';
@@ -8,11 +8,16 @@ import type { StatusSource } from '../src/sources.ts';
 
 const KEY = 'test-key-0123456789abcdef';
 const NOW = Date.parse('2026-11-24T20:30:00Z');
+/** Bilotserkivskyi raion of Kyivska (14). */
+const BILA_TSERKVA = 73;
 
 function makeStatus(overrides: Partial<StatusSource> = {}): StatusSource {
-  const regions = new Map<number, RegionState>(REGIONS.map((r) => [r.id, { level: Level.Green, flags: 0, since: 0 }]));
+  const regions = new Map<number, RegionState>(
+    [...REGIONS, ...RAIONS].map((r) => [r.id, { level: Level.Green, flags: 0, since: 0 }]),
+  );
   regions.set(31, { level: Level.Red, flags: 0, since: 1_764_000_000 });
   regions.set(14, { level: Level.Yellow, flags: Flag.Partial, since: 1_764_000_100 });
+  regions.set(BILA_TSERKVA, { level: Level.Red, flags: 0, since: 1_764_000_100 });
   return {
     snapshot: { regions, computedAt: NOW - 2000, unknownRegionIds: [] },
     lastOkAt: NOW - 3000,
@@ -73,6 +78,32 @@ describe('with fresh data', () => {
     assert.equal((body as { s?: number }).s, 0);
   });
 
+  test('/v1/s/:id accepts raion IDs', async () => {
+    const res = await app.inject({ url: `/v1/s/${BILA_TSERKVA}`, headers: auth });
+    assert.deepEqual(res.json(), { l: 2, f: 0, t: 1_764_000_100, a: 3, x: 0, s: 0 });
+  });
+
+  test('/v1/o/:id returns one digit per raion in idx order', async () => {
+    const raions = RAIONS_BY_OBLAST.get(14) ?? [];
+    const body = (await app.inject({ url: '/v1/o/14', headers: auth })).json() as { m: string; x: number; s: number };
+    assert.equal(body.m.length, raions.length);
+    const idx = raions.find((r) => r.id === BILA_TSERKVA)?.idx ?? -1;
+    assert.equal(body.m, raions.map((r) => (r.idx === idx ? '2' : '0')).join(''));
+    assert.equal(body.x, 0);
+    assert.equal(body.s, 0);
+  });
+
+  test('/v1/o/:id: empty for regions without raions, 404 for raions and unknown IDs', async () => {
+    assert.equal((await app.inject({ url: '/v1/o/31', headers: auth })).json().m, '');
+    assert.equal((await app.inject({ url: `/v1/o/${BILA_TSERKVA}`, headers: auth })).statusCode, 404);
+    assert.equal((await app.inject({ url: '/v1/o/123456', headers: auth })).statusCode, 404);
+  });
+
+  test('/healthz counts top-level regions only', async () => {
+    const { regions } = (await app.inject({ url: '/healthz' })).json();
+    assert.equal(regions.green + regions.yellow + regions.red, REGIONS.length);
+  });
+
   test('/v1/meta', async () => {
     const res = await app.inject({ url: '/v1/meta', headers: auth });
     assert.deepEqual(res.json(), { v: 1, src: 'siren', n: REGIONS.length, min: '0.1.0' });
@@ -122,9 +153,14 @@ describe('degraded states', () => {
     const crimeaIdx = REGIONS.find((r) => r.id === 9999)?.idx ?? -1;
     assert.equal(all.m[crimeaIdx], '3', 'uncovered region is unknown on the map, not its last colour');
     assert.equal(all.s, 1);
+    const luhanska = RAIONS_BY_OBLAST.get(16) ?? [];
+    for (const r of luhanska) regions.set(r.id, { level: Level.Red, flags: 0, since: 1, unknown: true });
+    const o = (await app.inject({ url: '/v1/o/16', headers: auth })).json();
+    assert.equal(o.m, '3'.repeat(luhanska.length), 'uncovered raions are unknown');
     const health = (await app.inject({ url: '/healthz' })).json();
     assert.equal(health.mode, 'fallback');
     assert.deepEqual(health.uncoveredRegionIds, [9999]);
+    assert.equal(health.uncoveredRaions, luhanska.length);
     await app.close();
   });
 });

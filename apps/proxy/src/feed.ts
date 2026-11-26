@@ -2,7 +2,7 @@
  * One upstream source polled on its own timer. Keeps the source's latest region states and
  * its health counters; `SourceSelector` decides which feed is served.
  */
-import { REGION_BY_ID } from '@alarmin/shared';
+import { RAION_BY_ID, REGION_BY_ID } from '@alarmin/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import {
   collectDeclared,
@@ -130,8 +130,9 @@ export class Feed {
       for (const [id, state] of regions) {
         const before = previous.get(id);
         if (before && before.level !== state.level) {
+          const name = REGION_BY_ID.get(id)?.nameLatin ?? RAION_BY_ID.get(id)?.nameLatin;
           this.#opts.log.debug(
-            { source: this.name, region: REGION_BY_ID.get(id)?.nameLatin, from: before.level, to: state.level },
+            { source: this.name, region: name, from: before.level, to: state.level },
             'source level changed',
           );
         }
@@ -160,5 +161,6 @@ export function tryvohaFetcher(client: Pick<TryvohaClient, 'alerts'>): () => Pro
   return async () => ({ kind: 'ok', ...observeTryvoha(await client.alerts()) });
 }
 
-/** Regions Tryvoha has (Crimea isn't one of them). */
-export const tryvohaCovers = (id: number): boolean => Boolean(REGION_BY_ID.get(id)?.tryvohaSlug);
+/** Regions and raions Tryvoha has (not Crimea, not the four Luhansk raions). */
+export const tryvohaCovers = (id: number): boolean =>
+  Boolean(REGION_BY_ID.get(id)?.tryvohaSlug ?? RAION_BY_ID.get(id)?.tryvohaSlug);

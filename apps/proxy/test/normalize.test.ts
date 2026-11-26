@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { BUNDLED_SIREN_PARENTS, Flag, Level, REGIONS } from '@alarmin/shared';
+import { BUNDLED_SIREN_PARENTS, CITY_RAION, Flag, Level, RAIONS, RAIONS_BY_OBLAST, REGIONS } from '@alarmin/shared';
 import {
   collectDeclared,
   computeStates,
@@ -45,7 +45,7 @@ describe('recorded snapshot', () => {
   const flags = (id: number) => regions.get(id)?.flags ?? 0;
 
   test('every region gets a state', () => {
-    assert.equal(regions.size, REGIONS.length);
+    assert.equal(regions.size, REGIONS.length + RAIONS.length);
     assert.deepEqual(unknownRegionIds, []);
   });
 
@@ -85,6 +85,24 @@ describe('recorded snapshot', () => {
   test('cold-start since comes from upstream timestamps', () => {
     const since = regions.get(ID.crimea)?.since ?? 0;
     assert.ok(since > 0 && since < NOW_S);
+  });
+
+  test('raions of an all-red oblast are red', () => {
+    for (const r of RAIONS_BY_OBLAST.get(ID.donetska) ?? []) assert.equal(level(r.id), Level.Red, r.nameLatin);
+  });
+
+  test('a partial oblast has raions of more than one colour, and a yellow oblast at least one non-green raion', () => {
+    for (const id of [ID.dnipropetrovska, ID.odeska, ID.sumska, ID.kharkivska]) {
+      const raions = (RAIONS_BY_OBLAST.get(id) ?? []).map((r) => level(r.id));
+      assert.ok(
+        raions.some((l) => l !== Level.Green),
+        `region ${id}: ${raions}`,
+      );
+    }
+  });
+
+  test('raions of a green oblast are green', () => {
+    for (const r of RAIONS_BY_OBLAST.get(ID.lvivska) ?? []) assert.equal(level(r.id), Level.Green, r.nameLatin);
   });
 });
 
@@ -170,6 +188,49 @@ describe('computeStates', () => {
     assert.equal(regions.get(ID.lvivska)?.since, NOW_S);
   });
 
+  test("an oblast's own Red makes every raion red", () => {
+    const { regions } = computeStates([air(ID.kyivska)], tree, null, NOW);
+    for (const r of RAIONS_BY_OBLAST.get(ID.kyivska) ?? []) assert.equal(regions.get(r.id)?.level, Level.Red);
+  });
+
+  test("an oblast's own Yellow makes every raion yellow (own-yellow)", () => {
+    const { regions } = computeStates([air(ID.kyivska, 'Yellow')], tree, null, NOW);
+    for (const r of RAIONS_BY_OBLAST.get(ID.kyivska) ?? []) {
+      assert.equal(regions.get(r.id)?.level, Level.Yellow);
+      assert.equal(regions.get(r.id)?.flags, Flag.OwnYellow);
+    }
+  });
+
+  test('a raion alert colours that raion only; the oblast is partial', () => {
+    const [first, ...rest] = RAIONS_BY_OBLAST.get(ID.lvivska) ?? [];
+    const { regions } = computeStates([air(first?.id ?? -1)], tree, null, NOW);
+    assert.equal(regions.get(first?.id ?? -1)?.level, Level.Red);
+    for (const r of rest) assert.equal(regions.get(r.id)?.level, Level.Green, r.nameLatin);
+    assert.equal(regions.get(ID.lvivska)?.level, Level.Yellow);
+  });
+
+  test('a hromada alert makes its raion yellow (partial); all hromadas red make it red', () => {
+    const raion = tree.childrenOf(ID.lvivska)[0] ?? -1;
+    const hromadas = tree.childrenOf(raion);
+    const one = computeStates([air(hromadas[0] ?? -1)], tree, null, NOW).regions.get(raion);
+    assert.equal(one?.level, Level.Yellow);
+    assert.ok((one?.flags ?? 0) & Flag.Partial);
+    const all = computeStates(
+      hromadas.map((h) => air(h)),
+      tree,
+      null,
+      NOW,
+    ).regions.get(raion);
+    assert.equal(all?.level, Level.Red);
+  });
+
+  test('a separately announcing city makes its raion partial', () => {
+    const raion = CITY_RAION.get(ID.kharkivCity) ?? -1;
+    const { regions } = computeStates([air(ID.kharkivCity)], tree, null, NOW);
+    assert.equal(regions.get(raion)?.level, Level.Yellow);
+    assert.ok((regions.get(raion)?.flags ?? 0) & Flag.Partial);
+  });
+
   test('alerts outside the tree are reported, not applied', () => {
     const { unknownRegionIds } = computeStates([air(123456)], tree, null, NOW);
     assert.deepEqual(unknownRegionIds, [123456]);
@@ -196,6 +257,16 @@ describe('tryvoha', () => {
     );
     assert.deepEqual(diff, []);
     assert.equal(regions.get(ID.crimea)?.level, Level.Green, 'not covered: the selector marks it unknown');
+  });
+
+  test('raion colours match Siren for every raion Tryvoha has, bar one upstream difference', () => {
+    const siren = computeStates(collectDeclared(fixture), tree, null, NOW).regions;
+    const diff = RAIONS.filter((r) => r.tryvohaSlug && siren.get(r.id)?.level !== regions.get(r.id)?.level).map(
+      (r) => `${r.nameLatin} (${r.id}): siren ${siren.get(r.id)?.level} tryvoha ${regions.get(r.id)?.level}`,
+    );
+    // Same alert in both (started 19:54:35), but Siren declares it Red and Tryvoha yellow.
+    // Both make Dnipropetrovska partial, so the oblast-level comparison above can't see it.
+    assert.deepEqual(diff, ['Nikopolskyi (47): siren 2 tryvoha 1']);
   });
 
   test('state, district and community alerts are placed by scope', () => {

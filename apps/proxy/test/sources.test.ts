@@ -22,7 +22,15 @@ const log = {
   },
 } as unknown as FastifyBaseLogger;
 
-const red = (top: number): Observed => ({ top, scope: 'own', raion: '', type: 'AIR', level: 'Red', createdAt: 0 });
+const red = (top: number): Observed => ({
+  top,
+  scope: 'own',
+  raion: '',
+  raionId: null,
+  type: 'AIR',
+  level: 'Red',
+  createdAt: 0,
+});
 
 /** A feed whose next poll result is set by the test. */
 function scripted(name: 'siren' | 'tryvoha', clock: { t: number }) {

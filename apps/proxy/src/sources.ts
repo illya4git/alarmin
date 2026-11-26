@@ -6,16 +6,18 @@
  * - FALLBACK → PRIMARY after M successful Siren polls in a row.
  * - Both down → keep serving the last snapshot; its age makes it stale for the watch.
  * - Regions the serving source doesn't cover (Crimea in Tryvoha) keep their last known
- *   level, marked `unknown` (stale for the watch), never reported as green.
+ *   level, marked `unknown` (stale for the watch), never reported as green. Raions likewise.
+ * - Divergence is tracked for top-level regions only.
  * - Divergence (levels differ while both feeds are fresh) is tracked per region; past the
  *   threshold it's logged and listed in /healthz. It never triggers a switch.
  */
-import { REGION_BY_ID, REGIONS } from '@alarmin/shared';
+import { RAIONS, REGION_BY_ID, REGIONS } from '@alarmin/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Feed, SourceName } from './feed.ts';
 import type { RegionState } from './normalize.ts';
 
 export interface Snapshot {
+  /** Top-level regions and raions, by Siren ID. */
   regions: ReadonlyMap<number, RegionState>;
   /** Epoch ms when this snapshot was computed. */
   computedAt: number;
@@ -175,7 +177,7 @@ export class SourceSelector implements StatusSource {
     if (!feed.regions) return; // nothing from this source yet: keep the last snapshot, it ages into stale
     const previous = this.snapshot?.regions ?? null;
     const regions = new Map<number, RegionState>();
-    for (const r of REGIONS) {
+    for (const r of [...REGIONS, ...RAIONS]) {
       const prev = previous?.get(r.id);
       if (!feed.covers(r.id)) {
         regions.set(r.id, { level: prev?.level ?? 0, flags: prev?.flags ?? 0, since: prev?.since ?? 0, unknown: true });
@@ -187,7 +189,8 @@ export class SourceSelector implements StatusSource {
       const since = prev && !prev.unknown && prev.level === next.level ? prev.since : next.since;
       regions.set(r.id, { level: next.level, flags: next.flags, since });
       if (prev && prev.level !== next.level) {
-        this.#o.log.info(
+        // Raion changes are frequent; keep them out of the info log.
+        this.#o.log[REGION_BY_ID.has(r.id) ? 'info' : 'debug'](
           { region: r.nameLatin, id: r.id, from: prev.level, to: next.level, flags: next.flags, source: feed.name },
           'level changed',
         );

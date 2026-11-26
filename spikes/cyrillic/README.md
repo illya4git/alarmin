@@ -23,14 +23,14 @@ For the device, copy `bin\cyrillic-fr55.prg` to `GARMIN\APPS\` over USB.
 
 ## Results
 
-| Check                                         | Simulator (SDK 9.2.0, FR55 3.4.2)                              | FR55 |
-| --------------------------------------------- | -------------------------------------------------------------- | ---- |
-| Basic Cyrillic (`Київ Львів Одеса`)           | ✅ renders (XTINY)                                             |      |
-| Є є І і Ї ї Ґ ґ                               | ✅ renders (XTINY)                                             |      |
-| Apostrophes ’ (2019) and ' (0027)             | ✅ renders (XTINY)                                             |      |
-| String from `strings.xml`                     | ✅ renders                                                     |      |
-| TINY / SMALL / MEDIUM / LARGE pages           |                                                                |      |
-| Width table: any 0 px among the Ukrainian set |                                                                |      |
-| Status-page fit: `Дніпропетровська` in SMALL  |                                                                |      |
+| Check                                         | Simulator (SDK 9.2.0, FR55 3.4.2) | FR55 |
+| --------------------------------------------- | --------------------------------- | ---- |
+| Basic Cyrillic (`Київ Львів Одеса`)           | ✅ renders (XTINY)                |      |
+| Є є І і Ї ї Ґ ґ                               | ✅ renders (XTINY)                |      |
+| Apostrophes ’ (2019) and ' (0027)             | ✅ renders (XTINY)                |      |
+| String from `strings.xml`                     | ✅ renders                        |      |
+| TINY / SMALL / MEDIUM / LARGE pages           |                                   |      |
+| Width table: any 0 px among the Ukrainian set |                                   |      |
+| Status-page fit: `Дніпропетровська` in SMALL  |                                   |      |
 
 The simulator draws with copies of the device's own font files (`FNT_006B386900_CDPG_ROBOTO_*`, keyed by the FR55's part number). The device should therefore match, but only the watch can confirm it. FR55 units sold in Asia (part number 006-B4033) use different font sets.

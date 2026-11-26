@@ -8,10 +8,27 @@
  * - GREEN  = otherwise.
  * Artillery and urban-fight alerts only set flags.
  *
+ * Raions (Phase 8) get the same rule one level down, plus what applies to their whole oblast:
+ * - RED    = the raion's own Red alert, every one of its hromadas Red, or the oblast's own Red.
+ * - YELLOW = the raion's own Yellow, the oblast's own Yellow, or any hromada (or separately
+ *            announcing city, `CITY_RAION`) inside it under alert.
+ * Raion states share the map with the top-level regions; Siren IDs don't overlap.
+ *
  * Each source is first mapped to `Observed` alerts (`observeSiren`, `observeTryvoha`);
  * `statesFrom` applies the rule above to either.
  */
-import { Flag, Level, REGION_BY_ID, REGION_BY_TRYVOHA_SLUG, REGIONS } from '@alarmin/shared';
+import {
+  CITY_RAION,
+  Flag,
+  Level,
+  RAION_BY_ID,
+  RAION_BY_TRYVOHA_SLUG,
+  RAIONS,
+  REGION_BY_ID,
+  REGION_BY_TRYVOHA_SLUG,
+  REGIONS,
+  TRYVOHA_COMMUNITY_RAION,
+} from '@alarmin/shared';
 import type { RegionTree } from './regionTree.ts';
 import type { SirenAlertEntry } from './upstream/siren.ts';
 import type { TryvohaAlert } from './upstream/tryvoha.ts';
@@ -39,8 +56,10 @@ export interface Observed {
   top: number;
   /** Declared on the region itself, on one of its raions, or deeper (hromada). */
   scope: 'own' | 'raion' | 'sub';
-  /** Identifies the raion when `scope` is `raion` (counted against the tree's raion count). */
+  /** The declaring region (Siren ID or Tryvoha slug): counted as a raion of the oblast when `scope` is `raion`, as a hromada of the raion when `sub`. */
   raion: string;
+  /** Siren ID of the raion the alert falls in (`raion` and `sub` scope); null for own scope or when not known. */
+  raionId: number | null;
   type: string;
   level: 'Red' | 'Yellow';
   /** Epoch ms; 0 if unknown. */
@@ -96,7 +115,21 @@ export function observeSiren(declared: readonly DeclaredAlert[], tree: RegionTre
       continue;
     }
     const scope = d.regionId === top ? 'own' : tree.parentOf(d.regionId) === top ? 'raion' : 'sub';
-    observed.push({ top, scope, raion: String(d.regionId), type: d.type, level: d.level, createdAt: d.createdAt });
+    // The raion is the declaring region's ancestor just below the top-level region.
+    let raionId: number | null = null;
+    if (scope !== 'own') {
+      raionId = d.regionId;
+      for (let p = tree.parentOf(raionId); p !== undefined && p !== top; p = tree.parentOf(raionId)) raionId = p;
+    }
+    observed.push({
+      top,
+      scope,
+      raion: String(d.regionId),
+      raionId,
+      type: d.type,
+      level: d.level,
+      createdAt: d.createdAt,
+    });
   }
   return { observed, unknown: [...unknown] };
 }
@@ -107,8 +140,14 @@ export function observeTryvoha(alerts: readonly TryvohaAlert[]): Observation {
   const unknown = new Set<string>();
   for (const a of alerts) {
     const isState = a.type === 'state';
+    let raionId: number | null = null;
+    if (a.type === 'district') raionId = RAION_BY_TRYVOHA_SLUG.get(a.slug)?.id ?? null;
+    else if (!isState) raionId = TRYVOHA_COMMUNITY_RAION.get(a.slug) ?? null;
+    // Some communities come without `oblast_slug`; their raion still places them.
     const slug = isState ? a.slug : (a.oblast_slug ?? '');
-    const region = REGION_BY_TRYVOHA_SLUG.get(slug);
+    const raionOblast = raionId === null ? undefined : RAION_BY_ID.get(raionId)?.oblastId;
+    const region =
+      REGION_BY_TRYVOHA_SLUG.get(slug) ?? (raionOblast === undefined ? undefined : REGION_BY_ID.get(raionOblast));
     if (!region) {
       unknown.add(slug || a.slug);
       continue;
@@ -117,6 +156,7 @@ export function observeTryvoha(alerts: readonly TryvohaAlert[]): Observation {
       top: region.id,
       scope: isState ? 'own' : a.type === 'district' ? 'raion' : 'sub',
       raion: a.slug,
+      raionId,
       type: 'AIR',
       level: toLevel(a.level),
       createdAt: parseTime(a.started_at),
@@ -129,15 +169,80 @@ interface Acc {
   ownRed: number | null; // earliest createdAt (ms) of the region's own Red AIR alert
   ownYellow: number | null;
   partial: number | null; // earliest AIR alert anywhere below the region
-  redRaions: Map<string, number>; // raion → createdAt of its own Red AIR alert
+  /** Direct child (raion of an oblast, hromada of a raion) → createdAt of its own Red AIR alert. */
+  redChildren: Map<string, number>;
   flags: number;
 }
 
+const newAcc = (): Acc => ({ ownRed: null, ownYellow: null, partial: null, redChildren: new Map(), flags: 0 });
 const minTime = (a: number | null, b: number): number => (a === null ? b : Math.min(a, b));
 
+/** Adds one alert to a region's accumulator. `child` is the direct child that declared it, if any. */
+function add(a: Acc, o: Observed, own: boolean, child: string | null): void {
+  if (o.type === 'ARTILLERY') {
+    a.flags |= Flag.Artillery;
+    return;
+  }
+  if (o.type === 'URBAN_FIGHTS') {
+    a.flags |= Flag.UrbanFights;
+    return;
+  }
+  if (o.type !== 'AIR') return;
+  if (own) {
+    if (o.level === 'Red') a.ownRed = minTime(a.ownRed, o.createdAt);
+    else a.ownYellow = minTime(a.ownYellow, o.createdAt);
+    return;
+  }
+  a.partial = minTime(a.partial, o.createdAt);
+  if (o.level === 'Red' && child !== null) {
+    a.redChildren.set(child, Math.min(a.redChildren.get(child) ?? o.createdAt, o.createdAt));
+  }
+}
+
+/** Earliest air-raid alert on or under the region, or null if none. */
+function anyAir(a: Acc): number | null {
+  const times = [a.ownRed, a.ownYellow, a.partial].filter((t): t is number => t !== null);
+  return times.length ? Math.min(...times) : null;
+}
+
 /**
- * Applies the D3 rule. `since` is kept from `previous` while a level holds, set to now on a
- * transition, and estimated from upstream timestamps on cold start (`previous` null).
+ * Level, flags and `since` from an accumulator. `childCount` is the number of direct children in
+ * the Siren tree (raions of an oblast, hromadas of a raion), for the all-children-red rule.
+ */
+function finish(a: Acc, childCount: number, prev: RegionState | undefined, cold: boolean, nowS: number): RegionState {
+  // Tryvoha uses its own slugs for children, so the check compares counts
+  // (the 2026-11-25 recording matched 1:1 this way for oblasts).
+  const allChildrenRed = childCount > 0 && a.redChildren.size >= childCount;
+  const red = a.ownRed !== null || allChildrenRed;
+
+  let flags = a.flags;
+  if (a.ownYellow !== null) flags |= Flag.OwnYellow;
+  if (a.partial !== null) flags |= Flag.Partial;
+
+  const level: Level = red ? Level.Red : a.ownYellow !== null || a.partial !== null ? Level.Yellow : Level.Green;
+
+  let since: number;
+  if (prev && prev.level === level) {
+    since = prev.since;
+  } else if (!cold) {
+    since = nowS; // transition observed live
+  } else {
+    // Cold start: best guess from upstream timestamps.
+    let startMs = 0;
+    if (level === Level.Red) {
+      startMs = a.ownRed ?? Math.max(0, ...a.redChildren.values());
+    } else if (level === Level.Yellow) {
+      startMs = Math.min(a.ownYellow ?? Number.POSITIVE_INFINITY, a.partial ?? Number.POSITIVE_INFINITY);
+    }
+    since = Number.isFinite(startMs) && startMs > 0 ? Math.floor(startMs / 1000) : 0;
+  }
+  return { level, flags, since };
+}
+
+/**
+ * Applies the D3 rule to top-level regions and raions (one map, keyed by Siren ID). `since` is kept
+ * from `previous` while a level holds, set to now on a transition, and estimated from upstream
+ * timestamps on cold start (`previous` null).
  */
 export function statesFrom(
   observed: readonly Observed[],
@@ -145,79 +250,46 @@ export function statesFrom(
   previous: ReadonlyMap<number, RegionState> | null,
   nowMs: number,
 ): Map<number, RegionState> {
-  const acc = new Map<number, Acc>(
-    REGIONS.map((r) => [r.id, { ownRed: null, ownYellow: null, partial: null, redRaions: new Map(), flags: 0 }]),
-  );
+  const acc = new Map<number, Acc>(REGIONS.map((r) => [r.id, newAcc()]));
+  const raionAcc = new Map<number, Acc>(RAIONS.map((r) => [r.id, newAcc()]));
 
   for (const o of observed) {
     const a = acc.get(o.top);
     if (!a) continue;
-    if (o.type === 'ARTILLERY') {
-      a.flags |= Flag.Artillery;
-      continue;
-    }
-    if (o.type === 'URBAN_FIGHTS') {
-      a.flags |= Flag.UrbanFights;
-      continue;
-    }
-    if (o.type !== 'AIR') continue;
-
-    if (o.scope === 'own') {
-      if (o.level === 'Red') a.ownRed = minTime(a.ownRed, o.createdAt);
-      else a.ownYellow = minTime(a.ownYellow, o.createdAt);
-    } else {
-      a.partial = minTime(a.partial, o.createdAt);
-      if (o.level === 'Red' && o.scope === 'raion') {
-        a.redRaions.set(o.raion, Math.min(a.redRaions.get(o.raion) ?? o.createdAt, o.createdAt));
-      }
-    }
+    add(a, o, o.scope === 'own', o.scope === 'raion' ? o.raion : null);
+    const r = o.raionId === null ? undefined : raionAcc.get(o.raionId);
+    if (r) add(r, o, o.scope === 'raion', o.scope === 'sub' ? o.raion : null);
   }
 
-  // Separately announcing cities make their parent oblast partial.
+  // Separately announcing cities make their parent oblast and their raion partial.
   for (const region of REGIONS) {
     if (region.parentId === null) continue;
     const city = acc.get(region.id);
+    const start = city ? anyAir(city) : null;
+    if (start === null) continue;
     const parent = acc.get(region.parentId);
-    if (!city || !parent) continue;
-    const cityAir = [city.ownRed, city.ownYellow, city.partial].filter((t): t is number => t !== null);
-    if (cityAir.length) parent.partial = minTime(parent.partial, Math.min(...cityAir));
+    if (parent) parent.partial = minTime(parent.partial, start);
+    const raionId = CITY_RAION.get(region.id);
+    const raion = raionId === undefined ? undefined : raionAcc.get(raionId);
+    if (raion) raion.partial = minTime(raion.partial, start);
+  }
+
+  // An oblast's own alert covers every raion in it.
+  for (const raion of RAIONS) {
+    const oblast = acc.get(raion.oblastId);
+    const r = raionAcc.get(raion.id);
+    if (!oblast || !r) continue;
+    if (oblast.ownRed !== null) r.ownRed = minTime(r.ownRed, oblast.ownRed);
+    if (oblast.ownYellow !== null) r.ownYellow = minTime(r.ownYellow, oblast.ownYellow);
   }
 
   const nowS = Math.floor(nowMs / 1000);
-  const regions = new Map<number, RegionState>();
-  for (const [id, a] of acc) {
-    // Raions come from the Siren tree for both sources; Tryvoha uses its own raion slugs,
-    // so the check compares counts (the 2026-11-25 recording matched 1:1 this way).
-    const raionCount = tree.childrenOf(id).length;
-    const allRaionsRed = raionCount > 0 && a.redRaions.size >= raionCount;
-    const red = a.ownRed !== null || allRaionsRed;
-
-    let flags = a.flags;
-    if (a.ownYellow !== null) flags |= Flag.OwnYellow;
-    if (a.partial !== null) flags |= Flag.Partial;
-
-    const level: Level = red ? Level.Red : a.ownYellow !== null || a.partial !== null ? Level.Yellow : Level.Green;
-
-    const prev = previous?.get(id);
-    let since: number;
-    if (prev && prev.level === level) {
-      since = prev.since;
-    } else if (previous) {
-      since = nowS; // transition observed live
-    } else {
-      // Cold start: best guess from upstream timestamps.
-      let startMs = 0;
-      if (level === Level.Red) {
-        startMs = a.ownRed ?? Math.max(0, ...a.redRaions.values());
-      } else if (level === Level.Yellow) {
-        startMs = Math.min(a.ownYellow ?? Number.POSITIVE_INFINITY, a.partial ?? Number.POSITIVE_INFINITY);
-      }
-      since = Number.isFinite(startMs) && startMs > 0 ? Math.floor(startMs / 1000) : 0;
-    }
-
-    regions.set(id, { level, flags, since });
+  const cold = previous === null;
+  const states = new Map<number, RegionState>();
+  for (const [id, a] of [...acc, ...raionAcc]) {
+    states.set(id, finish(a, tree.childrenOf(id).length, previous?.get(id), cold, nowS));
   }
-  return regions;
+  return states;
 }
 
 export interface NormalizeResult {
