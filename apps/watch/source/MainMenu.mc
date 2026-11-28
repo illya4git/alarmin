@@ -5,7 +5,7 @@ import Toybox.WatchUi;
 // Reached with DOWN from the map; UP from the first item goes back to the map.
 class MainMenu extends WatchUi.Menu2 {
     function initialize() {
-        Menu2.initialize({:title => "Alarmin"});
+        Menu2.initialize({:title => new DotsTitle("Alarmin")});
         addItem(new WatchUi.MenuItem("Region", Settings.regionName(), :region, null));
         addItem(new WatchUi.MenuItem("Alerts", "Prompt on change", :alerts, null));
         addItem(new WatchUi.MenuItem("About", null, :about, null));

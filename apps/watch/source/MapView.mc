@@ -74,6 +74,7 @@ class MapView extends GlyphMapView {
             ? "All clear"
             : counts[Levels.RED] + " red  " + counts[Levels.YELLOW] + " yellow";
         drawFooter(dc, lv, text);
+        PageDots.draw(dc, PageDots.MAP, Graphics.COLOR_WHITE);
     }
 }
 

@@ -92,6 +92,8 @@ class MainView extends WatchUi.View {
         // Footer: freshness or error, at most two short lines (the round screen narrows at the bottom)
         dc.drawText(cx, h * 79 / 100, Graphics.FONT_XTINY, footer(st),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+
+        PageDots.draw(dc, PageDots.STATUS, fg);
     }
 
     private function footer(st as Dictionary<String, Number>) as String {
